@@ -13,6 +13,7 @@ import type { EditorTab } from './components/EditorArea'
 import { FileExplorer } from './components/FileExplorer'
 import type { FileNode } from './components/FileExplorer'
 import { StatusBar } from './components/StatusBar'
+import { ToastContainer, useToast } from './components/Toast'
 
 const MODEL_PATH_STORAGE_KEY = 'private-rag-gguf-path'
 const API_KEY_STORAGE_KEY = 'private-rag-header-api-key'
@@ -29,6 +30,9 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [activeFileId, setActiveFileId] = useState<string | null>(null)
 
+  // ── Toast ─────────────────────────────────────────────────────
+  const { toasts, push: pushToast, dismiss: dismissToast } = useToast()
+
   // ── Chat state ────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -40,6 +44,14 @@ export default function App() {
   const [apiKey, setApiKey] = useState('')
   const [chatStreamEnabled, setChatStreamEnabled] = useState(true)
   const streamAbortRef = useRef<AbortController | null>(null)
+
+  // ── Warnings → Toast ─────────────────────────────────────────
+  const prevWarningsLen = useRef(0)
+  useEffect(() => {
+    const newOnes = warnings.slice(prevWarningsLen.current)
+    newOnes.forEach((w) => pushToast(w, 'error'))
+    prevWarningsLen.current = warnings.length
+  }, [warnings, pushToast])
 
   // ── Persistence ───────────────────────────────────────────────
   useEffect(() => {
@@ -386,6 +398,9 @@ export default function App() {
         errors={0}
         warnings={warnings.length}
       />
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

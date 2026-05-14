@@ -80,7 +80,7 @@ export function AiChatSidebar({
                 className={[
                   'group flex shrink-0 cursor-pointer select-none items-center gap-1.5 border-r border-[#3c3c3c] px-3 text-[12px] transition-colors border-b-2',
                   isActive
-                    ? 'bg-[#252526] text-[#cccccc] border-b-[#cccccc]'
+                    ? 'bg-[#252526] text-[#cccccc] border-b-[#252526]'
                     : 'text-[#858585] hover:bg-[#252526]/60 hover:text-[#aaaaaa] border-b-transparent',
                 ].join(' ')}
               >
@@ -129,7 +129,6 @@ export function AiChatSidebar({
       <div className="min-h-0 flex-1 overflow-hidden">
         <ChatTranscript
           messages={messages}
-          warnings={warnings}
           streaming={streaming}
           onRegenerate={onRegenerate}
           onUserEditSubmit={onUserEditSubmit}
