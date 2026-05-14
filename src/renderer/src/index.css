@@ -9,8 +9,30 @@
     @apply antialiased;
   }
   body {
-    @apply min-h-screen bg-slate-200/80 dark:bg-[#020617];
+    @apply min-h-screen overflow-hidden bg-[#1e1e1e];
+    color: #cccccc;
   }
+}
+
+/* Scrollbar styling for editor-like panels */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Hide scrollbar track on narrow panels */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /*

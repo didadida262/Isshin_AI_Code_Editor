@@ -1,13 +1,9 @@
 import {
   faArrowUp,
-  faPaperclip,
-  faPlus,
   faSquare,
-  faXmark,
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 type Props = {
   value: string
@@ -15,11 +11,6 @@ type Props = {
   onSubmit: () => void
   streaming: boolean
   onStop: () => void
-  /** 用户通过「上传文件」选中的文件（由上层决定如何读入/提示） */
-  onFilesChosen?: (files: File[]) => void
-  /** 已选中的 PDF/DOCX（由 Node 中间层解析），展示为胶囊标签 */
-  attachedDocumentName?: string | null
-  onClearAttachedDocument?: () => void
 }
 
 export function InputBar({
@@ -28,14 +19,8 @@ export function InputBar({
   onSubmit,
   streaming,
   onStop,
-  onFilesChosen,
-  attachedDocumentName,
-  onClearAttachedDocument,
 }: Props) {
-  const [menuOpen, setMenuOpen] = useState(false)
   const ta = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const shellRef = useRef<HTMLDivElement>(null)
   const wasStreaming = useRef(false)
 
   const submit = useCallback(() => {
@@ -43,13 +28,11 @@ export function InputBar({
     onSubmit()
   }, [streaming, onSubmit, value])
 
-  const hasAttachedDoc = Boolean(attachedDocumentName?.trim())
-
   useEffect(() => {
     const el = ta.current
     if (!el) return
     el.style.height = '0px'
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 32), 200)}px`
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 36), 200)}px`
   }, [value])
 
   useEffect(() => {
@@ -59,170 +42,50 @@ export function InputBar({
     wasStreaming.current = streaming
   }, [streaming])
 
-  useEffect(() => {
-    if (!menuOpen) return
-    const onDocDown = (e: MouseEvent) => {
-      if (shellRef.current?.contains(e.target as Node)) return
-      setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDocDown)
-    return () => document.removeEventListener('mousedown', onDocDown)
-  }, [menuOpen])
-
-  useEffect(() => {
-    if (!menuOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [menuOpen])
-
-  const openUpload = () => {
-    fileInputRef.current?.click()
-    setMenuOpen(false)
-  }
-
-  const pillClass =
-    'flex min-h-[46px] items-center gap-1 rounded-[28px] border border-zinc-200/90 bg-white/85 px-2 py-1.5 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.35),0_0_0_1px_rgba(15,23,42,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 dark:border-zinc-500/60 dark:bg-zinc-800/90 dark:shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.12)] focus-within:border-cyan-400/65 focus-within:shadow-[0_12px_40px_-12px_rgba(15,23,42,0.35),0_0_0_1px_rgba(34,211,238,0.45),0_0_24px_-4px_rgba(34,211,238,0.28)] dark:focus-within:border-cyan-400/55 dark:focus-within:shadow-[0_16px_48px_-12px_rgba(0,0,0,0.65),0_0_0_1px_rgba(34,211,238,0.55),0_0_32px_-6px_rgba(34,211,238,0.38)]'
-
-  const attachBtnClass =
-    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-600 transition-colors hover:bg-zinc-200/70 dark:text-zinc-200 dark:hover:bg-zinc-600/70 disabled:pointer-events-none disabled:opacity-40'
-
   return (
-    <div className="shrink-0 bg-transparent px-5 pb-4 pt-2 sm:px-8">
-      <div ref={shellRef} className="relative mx-auto w-full max-w-3xl">
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="sr-only"
-          tabIndex={-1}
-          onChange={(e) => {
-            const { files } = e.target
-            const first = files?.[0]
-            if (first && onFilesChosen) {
-              onFilesChosen([first])
+    <div className="shrink-0 px-3 pb-3 pt-2">
+      {/* Main input box */}
+      <div className="flex flex-col rounded-xl border border-[#3c3c3c] bg-[#2a2a2a] transition-[border-color] duration-150 focus-within:border-[#555555]">
+        {/* Textarea */}
+        <textarea
+          ref={ta}
+          rows={1}
+          value={value}
+          disabled={streaming}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              submit()
             }
-            e.target.value = ''
           }}
+          placeholder="有问题，尽管问"
+          className="block max-h-[200px] min-h-[36px] w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-[13px] leading-5 text-[#cccccc] outline-none placeholder:text-[#555555] disabled:opacity-60"
         />
 
-        <AnimatePresence>
-          {menuOpen ? (
-            <motion.div
-              key="attach-menu"
-              role="menu"
-              className="absolute bottom-[calc(100%+10px)] left-0 z-20 min-w-[220px] origin-bottom-left overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/95 py-1 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.25),0_0_0_1px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-zinc-600/80 dark:bg-zinc-900/95 dark:shadow-[0_20px_56px_-12px_rgba(0,0,0,0.65)]"
-              initial={{ opacity: 0, y: 12, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.96 }}
-              transition={{
-                type: 'spring',
-                stiffness: 420,
-                damping: 32,
-                mass: 0.85,
-              }}
-            >
-              <motion.button
-                type="button"
-                role="menuitem"
-                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm text-zinc-800 transition-colors hover:bg-zinc-100/90 dark:text-zinc-100 dark:hover:bg-zinc-800/90"
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.04, type: 'spring', stiffness: 380, damping: 28 }}
-                onClick={openUpload}
-              >
-                <FontAwesomeIcon
-                  icon={faPaperclip}
-                  className="w-4 shrink-0 text-zinc-500 dark:text-zinc-400"
-                />
-                上传文件（单次 1 个）
-              </motion.button>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <div
-          className={`${pillClass} ${hasAttachedDoc ? 'flex-col gap-1.5 !items-stretch' : ''}`}
-        >
-          {hasAttachedDoc ? (
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 border-b border-zinc-200/80 px-1 pb-2 pt-0.5 dark:border-zinc-600/70">
-              <span className="max-w-[min(100%,280px)] truncate rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-800 dark:bg-cyan-400/15 dark:text-cyan-100">
-                {attachedDocumentName}
-              </span>
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-end px-2 pb-2 pt-1">
+            <div className="flex items-center">
+            {streaming ? (
               <button
                 type="button"
-                disabled={streaming}
-                onClick={() => onClearAttachedDocument?.()}
-                className="shrink-0 rounded-full px-2 py-0.5 text-xs text-zinc-500 transition hover:bg-zinc-200/80 hover:text-zinc-800 disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-zinc-600/70 dark:hover:text-zinc-100"
+                onClick={onStop}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#cccccc] text-[#1a1a1a] transition hover:bg-[#ffffff]"
+                aria-label="停止生成"
               >
-                移除
+                <FontAwesomeIcon icon={faSquare} className="text-[8px] leading-none" />
               </button>
-            </div>
-          ) : null}
-          <div className="flex w-full min-w-0 items-end gap-1">
-          <motion.button
-            type="button"
-            className={attachBtnClass}
-            disabled={streaming}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-label={menuOpen ? '关闭附件菜单' : '打开附件菜单'}
-            onClick={() => setMenuOpen((o) => !o)}
-            whileTap={{ scale: 0.9 }}
-            transition={{ type: 'spring', stiffness: 520, damping: 26 }}
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.span
-                key={menuOpen ? 'x' : 'plus'}
-                initial={{ opacity: 0, scale: 0.82, rotate: menuOpen ? -28 : 28 }}
-                animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                exit={{ opacity: 0, scale: 0.88 }}
-                transition={{ type: 'tween', duration: 0.11, ease: [0.22, 1, 0.36, 1] }}
-                className="inline-flex"
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!value.trim()}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#cccccc] text-[#1a1a1a] transition hover:bg-[#ffffff] disabled:cursor-not-allowed disabled:bg-[#3c3c3c] disabled:text-[#6b6b6b]"
+                aria-label="发送"
               >
-                <FontAwesomeIcon
-                  icon={menuOpen ? faXmark : faPlus}
-                  className="text-base"
-                />
-              </motion.span>
-            </AnimatePresence>
-          </motion.button>
-          <textarea
-            ref={ta}
-            rows={1}
-            value={value}
-            disabled={streaming}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                submit()
-              }
-            }}
-            placeholder="有问题，尽管问"
-            className="block max-h-[200px] min-h-8 w-0 flex-1 resize-none bg-transparent py-1.5 pl-0.5 pr-1 text-[16px] leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 disabled:opacity-60 dark:text-zinc-50 dark:placeholder:text-zinc-400"
-          />
-          {streaming ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              aria-label="停止生成"
-            >
-              <FontAwesomeIcon icon={faSquare} className="text-[9px]" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!value.trim()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-600 dark:disabled:text-zinc-400"
-              aria-label="发送"
-            >
-              <FontAwesomeIcon icon={faArrowUp} className="text-xs" />
-            </button>
-          )}
+                <FontAwesomeIcon icon={faArrowUp} className="text-[11px] leading-none" />
+              </button>
+            )}
           </div>
         </div>
       </div>

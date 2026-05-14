@@ -13,6 +13,7 @@ type Props = {
   streaming: boolean
   onRegenerate: (assistantMessageIndex: number) => void
   onUserEditSubmit: (userMessageIndex: number, newText: string) => void
+  compact?: boolean
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -42,6 +43,7 @@ export function ChatTranscript({
   streaming,
   onRegenerate,
   onUserEditSubmit,
+  compact = false,
 }: Props) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [editingUserIndex, setEditingUserIndex] = useState<number | null>(null)
@@ -87,16 +89,23 @@ export function ChatTranscript({
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="text-center"
             >
-              <div className="rag-hero-empty">
-                <h1 className="rag-hero-title text-2xl sm:text-3xl md:text-4xl lg:text-[2.75rem] lg:leading-tight">
-                  需要我为你做些什么？
-                </h1>
-              </div>
+              {compact ? (
+                <div className="flex flex-col items-center gap-3">
+                  <span className="text-[32px] opacity-20 select-none">✦</span>
+                  <p className="text-[13px] text-[#858585]">需要我为你做些什么？</p>
+                </div>
+              ) : (
+                <div className="rag-hero-empty">
+                  <h1 className="rag-hero-title text-2xl sm:text-3xl md:text-4xl lg:text-[2.75rem] lg:leading-tight">
+                    需要我为你做些什么？
+                  </h1>
+                </div>
+              )}
             </motion.div>
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-5 py-4 sm:px-8">
-            <ul className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+          <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${compact ? 'px-3 py-3' : 'px-5 py-4 sm:px-8'}`}>
+            <ul className={`flex w-full flex-col gap-3 ${compact ? '' : 'mx-auto max-w-3xl gap-4'}`}>
               {messages.map((m, i) => {
                 const isStreamingThisAssistant =
                   m.role === 'assistant' &&

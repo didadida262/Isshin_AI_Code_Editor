@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Skynet",
+  "productName": "ISShin Code",
   "version": "1.0.0",
   "identifier": "com.private-rag.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Skynet",
+        "title": "ISShin Code",
         "width": 1100,
         "height": 760,
         "minWidth": 800,
