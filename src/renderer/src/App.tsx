@@ -4,7 +4,6 @@ import { faCog } from '@fortawesome/free-solid-svg-icons'
 import type { ChatMessage, LlmModelOption } from './api/client'
 import {
   fetchLlmModels,
-  streamLlmChatCompletions,
   streamAgentFromPython,
 } from './api/enterprise'
 import type { AgentEvent } from './agent/types'
@@ -22,7 +21,6 @@ import type { EditorOptions } from './components/SettingsPanel'
 const MODEL_PATH_STORAGE_KEY = 'private-rag-gguf-path'
 const API_KEY_STORAGE_KEY = 'private-rag-header-api-key'
 const BASE_URL_STORAGE_KEY = 'private-rag-llm-base-url'
-const CHAT_STREAM_STORAGE_KEY = 'private-rag-llm-chat-stream'
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'private-rag-header-token'
 const EDITOR_OPTIONS_STORAGE_KEY = 'private-rag-editor-options'
 
@@ -49,9 +47,7 @@ export default function App() {
   const [selectedModelPath, setSelectedModelPath] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const [chatStreamEnabled, setChatStreamEnabled] = useState(true)
   const streamAbortRef = useRef<AbortController | null>(null)
-  const [agentMode, setAgentMode] = useState(false)
 
   // ── Warnings → Toast ─────────────────────────────────────────
   const prevWarningsLen = useRef(0)
@@ -67,8 +63,6 @@ export default function App() {
       localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY)
       setBaseUrl(localStorage.getItem(BASE_URL_STORAGE_KEY) ?? '')
       setApiKey(localStorage.getItem(API_KEY_STORAGE_KEY) ?? '')
-      const streamStored = localStorage.getItem(CHAT_STREAM_STORAGE_KEY)
-      setChatStreamEnabled(streamStored !== '0')
       const editorStored = localStorage.getItem(EDITOR_OPTIONS_STORAGE_KEY)
       if (editorStored) {
         try {
@@ -147,11 +141,6 @@ export default function App() {
     try { localStorage.setItem(API_KEY_STORAGE_KEY, v) } catch { /* ignore */ }
   }, [])
 
-  const handleChatStreamChange = useCallback((v: boolean) => {
-    setChatStreamEnabled(v)
-    try { localStorage.setItem(CHAT_STREAM_STORAGE_KEY, v ? '1' : '0') } catch { /* ignore */ }
-  }, [])
-
   const handleEditorOptionsChange = useCallback((opts: EditorOptions) => {
     setEditorOptions(opts)
     try { localStorage.setItem(EDITOR_OPTIONS_STORAGE_KEY, JSON.stringify(opts)) } catch { /* ignore */ }
@@ -186,70 +175,10 @@ export default function App() {
     )
   }, [])
 
-  // ── Chat stream ───────────────────────────────────────────────
+  // ── Stream control ────────────────────────────────────────────
   const stopStream = useCallback(() => {
     streamAbortRef.current?.abort()
   }, [])
-
-  const runStream = useCallback(
-    async (text: string, history: ChatMessage[]) => {
-      setStreaming(true)
-      setWarnings([])
-      let assistant = ''
-      const ac = new AbortController()
-      streamAbortRef.current = ac
-
-      try {
-        if (!baseUrl.trim()) throw new Error('请填写 baseUrl')
-        if (!selectedModelPath.trim()) throw new Error('请填写 api_key 并选择模型')
-        if (!apiKey.trim()) throw new Error('请填写 api_key')
-
-        await streamLlmChatCompletions(baseUrl, apiKey, {
-          model: selectedModelPath,
-          messages: [...history, { role: 'user', content: text }],
-          stream: chatStreamEnabled,
-          signal: ac.signal,
-          onToken: (t) => {
-            assistant += t
-            setMessages((m) => {
-              const next = [...m]
-              const last = next[next.length - 1]
-              if (last?.role === 'assistant') next[next.length - 1] = { ...last, content: assistant }
-              return next
-            })
-          },
-        })
-      } catch (e) {
-        const aborted = e instanceof DOMException && e.name === 'AbortError'
-        if (aborted) {
-          setMessages((m) => {
-            const next = [...m]
-            const last = next[next.length - 1]
-            if (last?.role === 'assistant') {
-              const cur = last.content.trim()
-              next[next.length - 1] = { ...last, content: cur ? `${cur}\n\n（已停止生成）` : '（已停止生成）' }
-            }
-            return next
-          })
-        } else {
-          const msg = e instanceof Error ? e.message : '请求失败'
-          setWarnings((w) => [...w, msg])
-          setMessages((m) => {
-            const next = [...m]
-            const last = next[next.length - 1]
-            if (last?.role === 'assistant' && !last.content) {
-              next[next.length - 1] = { role: 'assistant', content: `（错误）${msg}` }
-            }
-            return next
-          })
-        }
-      } finally {
-        streamAbortRef.current = null
-        setStreaming(false)
-      }
-    },
-    [selectedModelPath, baseUrl, apiKey, chatStreamEnabled],
-  )
 
   // ── write_file 事件处理：Python agent 写入文件时同步到编辑器 ────────
   const handleWriteFile = useCallback((path: string, content: string) => {
@@ -396,12 +325,8 @@ export default function App() {
     setInput('')
     const history = [...messages]
     setMessages((m) => [...m, { role: 'user', content: text }, { role: 'assistant', content: '' }])
-    if (agentMode) {
-      await runAgentStream(text, history)
-    } else {
-      await runStream(text, history)
-    }
-  }, [input, streaming, messages, runStream, runAgentStream, agentMode])  // eslint-disable-line react-hooks/exhaustive-deps
+    await runAgentStream(text, history)
+  }, [input, streaming, messages, runAgentStream])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const regenerateAt = useCallback(
     async (assistantIndex: number) => {
@@ -413,9 +338,9 @@ export default function App() {
       const history = m.slice(0, assistantIndex - 1)
       const text = userPair.content
       setMessages([...m.slice(0, assistantIndex), { role: 'assistant', content: '' }])
-      await runStream(text, history)
+      await runAgentStream(text, history)
     },
-    [streaming, messages, runStream],
+    [streaming, messages, runAgentStream],
   )
 
   const submitUserEdit = useCallback(
@@ -428,9 +353,9 @@ export default function App() {
         { role: 'user', content: text },
         { role: 'assistant', content: '' },
       ])
-      await runStream(text, history)
+      await runAgentStream(text, history)
     },
-    [streaming, messages, runStream],
+    [streaming, messages, runAgentStream],
   )
 
   // ── Active tab language for status bar ────────────────────────
@@ -568,8 +493,6 @@ export default function App() {
           onRegenerate={regenerateAt}
           onUserEditSubmit={submitUserEdit}
           width={rightWidth}
-          agentMode={agentMode}
-          onAgentModeChange={setAgentMode}
         />
       </div>
 
@@ -590,10 +513,8 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         baseUrl={baseUrl}
         apiKey={apiKey}
-        chatStreamEnabled={chatStreamEnabled}
         onBaseUrlChange={handleBaseUrlChange}
         onApiKeyChange={handleApiKeyChange}
-        onChatStreamChange={handleChatStreamChange}
         editorOptions={editorOptions}
         onEditorOptionsChange={handleEditorOptionsChange}
       />

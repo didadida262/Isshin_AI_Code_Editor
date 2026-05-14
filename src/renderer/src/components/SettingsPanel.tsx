@@ -33,10 +33,8 @@ type Props = {
   onClose: () => void
   baseUrl: string
   apiKey: string
-  chatStreamEnabled: boolean
   onBaseUrlChange: (v: string) => void
   onApiKeyChange: (v: string) => void
-  onChatStreamChange: (v: boolean) => void
   editorOptions: EditorOptions
   onEditorOptionsChange: (opts: EditorOptions) => void
 }
@@ -171,10 +169,8 @@ export function SettingsPanel({
   onClose,
   baseUrl,
   apiKey,
-  chatStreamEnabled,
   onBaseUrlChange,
   onApiKeyChange,
-  onChatStreamChange,
   editorOptions,
   onEditorOptionsChange,
 }: Props) {
@@ -183,7 +179,6 @@ export function SettingsPanel({
   // Draft state — only committed on "应用"
   const [draftBaseUrl, setDraftBaseUrl] = useState(baseUrl)
   const [draftApiKey, setDraftApiKey] = useState(apiKey)
-  const [draftStream, setDraftStream] = useState(chatStreamEnabled)
   const [draftEditor, setDraftEditor] = useState<EditorOptions>(editorOptions)
   const [applied, setApplied] = useState(false)
 
@@ -192,15 +187,13 @@ export function SettingsPanel({
     if (open) {
       setDraftBaseUrl(baseUrl)
       setDraftApiKey(apiKey)
-      setDraftStream(chatStreamEnabled)
       setDraftEditor(editorOptions)
       setApplied(false)
     }
   }, [open]) // intentionally omit prop dependencies — only reset on open
 
   // Dirty check
-  const llmDirty =
-    draftBaseUrl !== baseUrl || draftApiKey !== apiKey || draftStream !== chatStreamEnabled
+  const llmDirty = draftBaseUrl !== baseUrl || draftApiKey !== apiKey
   const editorDirty = JSON.stringify(draftEditor) !== JSON.stringify(editorOptions)
   const isDirty = llmDirty || editorDirty
 
@@ -218,7 +211,6 @@ export function SettingsPanel({
     if (llmDirty) {
       onBaseUrlChange(draftBaseUrl)
       onApiKeyChange(draftApiKey)
-      onChatStreamChange(draftStream)
     }
     if (editorDirty) {
       onEditorOptionsChange(draftEditor)
@@ -318,14 +310,6 @@ export function SettingsPanel({
                   </Hint>
                 </Row>
 
-                <Row>
-                  <Toggle
-                    checked={draftStream}
-                    onChange={setDraftStream}
-                    label="启用流式输出（Streaming）"
-                  />
-                  <Hint>开启后逐 token 实时返回；关闭后等待完整响应后再显示</Hint>
-                </Row>
               </>
             )}
 
@@ -447,7 +431,6 @@ export function SettingsPanel({
                   onClick={() => {
                     setDraftBaseUrl(baseUrl)
                     setDraftApiKey(apiKey)
-                    setDraftStream(chatStreamEnabled)
                     setDraftEditor(editorOptions)
                   }}
                   className="rounded px-3 py-1.5 text-[12px] text-[#858585] transition-colors hover:bg-[#3c3c3c] hover:text-[#cccccc]"
