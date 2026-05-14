@@ -2,11 +2,7 @@
  * 企业平台开放接口 + 外部 LLM（baseUrl + `/llm/v1/...`）。
  * 普通会话与附件会话均经本机 Axum 网关（默认 8787）`POST /enterprise/api/v1/chat/completions`，
  * 由 Rust 后端带上 `X-Llm-Base-Url` 转发上游，避免浏览器对第三方域名的 CORS。
- * 若设置 VITE_ENTERPRISE_API_URL，仅影响企业站其它路径解析（见 `getEnterpriseOrigin`）；会话仍走本机网关。
- * 模型列表仍可能直连 {@link MODEL_SERVICES_LIST_URL}（与 baseUrl 无关，是否跨域取决于上游）。
  */
-
-export type EnterpriseApiKeyOption = { label: string; value: string }
 
 function trimOrigin(raw: string | undefined): string {
   if (raw == null) return ''
@@ -39,28 +35,8 @@ export function normalizeLlmApiPrefix(baseUrl: string): string {
 }
 
 /**
- * 必须使用绝对 URL：开发态页面在 http://127.0.0.1:5173 时相对路径尚能误打同源；
- * 打包后 Tauri 为自定义协议（如 https://tauri.localhost），相对路径可能失效。
- */
-function getEnterpriseOrigin(): string {
-  const direct = trimOrigin(import.meta.env.VITE_ENTERPRISE_API_URL)
-  if (direct) return direct
-
-  const proxy = trimOrigin(import.meta.env.VITE_API_PROXY_URL)
-  if (proxy) return proxy
-
-  return 'http://127.0.0.1:8787'
-}
-
-function enterpriseUrl(pathWithQuery: string): string {
-  const origin = getEnterpriseOrigin()
-  const path = pathWithQuery.startsWith('/') ? pathWithQuery : `/${pathWithQuery}`
-  return origin ? `${origin}${path}` : path
-}
-
-/**
  * 带 PDF/DOCX 时须 POST 到本机（同一路径 `/enterprise/.../chat/completions` + multipart），
- * 由 Node 解析后再 JSON 转发上游；若用 `VITE_ENTERPRISE_API_URL` 直连公网则无效。
+ * 由网关解析后再 JSON 转发上游。
  */
 function getLocalMiddlewareOrigin(): string {
   const proxy = trimOrigin(import.meta.env.VITE_API_PROXY_URL)
@@ -103,31 +79,6 @@ function extractRows(payload: unknown): unknown[] {
   return []
 }
 
-function maskSecret(s: string): string {
-  if (s.length <= 8) return '••••'
-  return `${s.slice(0, 4)}…${s.slice(-4)}`
-}
-
-function rowToApiKeyOption(row: unknown): EnterpriseApiKeyOption | null {
-  if (!row || typeof row !== 'object') return null
-  const r = row as Record<string, unknown>
-  const value = pickStr(r, [
-    'apiKey',
-    'api_key',
-    'key',
-    'secretKey',
-    'secret',
-    'token',
-    'value',
-    'id',
-  ])
-  if (!value) return null
-  const label =
-    pickStr(r, ['name', 'label', 'title', 'keyName', 'remark', 'description']) ||
-    maskSecret(value)
-  return { label, value }
-}
-
 export type EnterpriseModelOption = {
   path: string
   label: string
@@ -146,7 +97,6 @@ function rowToModelOption(row: unknown): EnterpriseModelOption | null {
     'code',
     'modelCode',
     'uuid',
-    /** 部分 model-services 仅返回 name，与 OpenAI model 字段一致 */
     'name',
     'model_name',
   ])
@@ -164,8 +114,7 @@ function rowToModelOption(row: unknown): EnterpriseModelOption | null {
 }
 
 /**
- * 与平台 Web 一致：JWT 走 Authorization Bearer，密钥走 X-Api-Key（与 DevTools 一致，HTTP 下与 X-API-Key 等价）。
- * api-keys、model-services、chat/completions 三类请求均通过此函数组头。
+ * 与平台 Web 一致：JWT 走 Authorization Bearer，密钥走 X-Api-Key。
  */
 export function authorizationBearer(token: string): string {
   const t = token.trim()
@@ -178,103 +127,27 @@ function buildEnterpriseAuthHeaders(
   apiKey: string,
 ): Headers {
   const h = new Headers()
-  /** 与平台 Web 默认 Accept 一致（走反代时 Referer/Cookie 由 server 注入） */
   h.set('Accept', 'application/json, text/plain, */*')
   const auth = authorizationBearer(token)
   if (auth) h.set('Authorization', auth)
   const k = apiKey.trim()
   if (k) {
-    /** 与平台网页 / Apifox 一致（勿用 api_key 作头名） */
     h.set('X-Api-Key', k)
   }
   return h
 }
 
-export async function fetchEnterpriseApiKeys(
-  token: string,
-  apiKey: string,
-): Promise<EnterpriseApiKeyOption[]> {
-  const url = enterpriseUrl('/enterprise/api/api-keys?pageNum=1&pageSize=10')
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: buildEnterpriseAuthHeaders(token, apiKey),
-  })
-  const text = await res.text()
-  if (!res.ok) {
-    throw new Error(text || `api-keys HTTP ${res.status}`)
-  }
-  let json: unknown
-  try {
-    json = JSON.parse(text) as unknown
-  } catch {
-    throw new Error('api-keys 返回非 JSON')
-  }
-  const rows = extractRows(json)
-  const out: EnterpriseApiKeyOption[] = []
-  const seen = new Set<string>()
-  for (const row of rows) {
-    const opt = rowToApiKeyOption(row)
-    if (opt && !seen.has(opt.value)) {
-      seen.add(opt.value)
-      out.push(opt)
-    }
-  }
-  return out
-}
-
-/** 模型下拉列表固定拉取此地址（与用户填写 baseUrl 无关） */
+/** 模型下拉列表固定拉取此地址 */
 export const MODEL_SERVICES_LIST_URL =
   'http://58.222.41.68/enterprise/api/model-services?pageNum=1&pageSize=10'
 
-export async function fetchEnterpriseModelServices(
-  token: string,
-  apiKey: string,
-): Promise<EnterpriseModelOption[]> {
-  const url = enterpriseUrl(
-    '/enterprise/api/model-services?pageNum=1&pageSize=200',
-  )
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: buildEnterpriseAuthHeaders(token, apiKey),
-  })
-  const text = await res.text()
-  if (!res.ok) {
-    throw new Error(text || `model-services HTTP ${res.status}`)
-  }
-  let json: unknown
-  try {
-    json = JSON.parse(text) as unknown
-  } catch {
-    throw new Error('model-services 返回非 JSON')
-  }
-  const rows = extractRows(json)
-  const out: EnterpriseModelOption[] = []
-  const seen = new Set<string>()
-  for (const row of rows) {
-    const opt = rowToModelOption(row)
-    if (opt && !seen.has(opt.path)) {
-      seen.add(opt.path)
-      out.push(opt)
-    }
-  }
-  return out
-}
-
-/**
- * 模型列表固定请求 {@link MODEL_SERVICES_LIST_URL}（企业 model-services），
- * 请求头：`X-Api-Key` + 可选 `Authorization: Bearer`（`authToken`，操作面板1 开搞须传）。
- */
 export async function fetchLlmModels(
   apiKey: string,
-  authToken?: string,
 ): Promise<EnterpriseModelOption[]> {
   if (!apiKey.trim()) return []
   const res = await fetch(MODEL_SERVICES_LIST_URL, {
     method: 'GET',
-    headers: buildEnterpriseAuthHeaders(
-      authToken?.trim() ?? '',
-      apiKey.trim(),
-    ),
+    headers: buildEnterpriseAuthHeaders('', apiKey.trim()),
   })
   const text = await res.text()
   if (!res.ok) {
@@ -418,7 +291,6 @@ async function consumeLlmChatCompletionsResponse(
       delta?: { content?: string; reasoning_content?: string }
     }>
   }
-  // 
   if (o.error?.message) throw new Error(o.error.message)
   const c0 = o.choices?.[0]
   const msg = c0?.message?.content
@@ -433,59 +305,6 @@ async function consumeLlmChatCompletionsResponse(
     return
   }
   throw new Error(text.slice(0, 400) || '无法解析模型回复')
-}
-
-/** 企业平台固定会话地址（`X-Api-Key` + `Authorization`） */
-export const ENTERPRISE_FIXED_CHAT_COMPLETIONS_URL =
-  'http://58.222.41.68/enterprise/api/v1/chat/completions'
-
-/**
- * 直连企业 `chat/completions`：`X-Api-Key` 用 apikey，`Authorization` 用 token（自动补 Bearer）。
- */
-export async function streamEnterpriseFixedChat(
-  xApiKey: string,
-  authToken: string,
-  params: {
-    model: string
-    messages: EnterpriseChatMessage[]
-    stream?: boolean
-    signal?: AbortSignal
-    onToken: (text: string) => void
-  },
-): Promise<void> {
-  const { model, messages, signal, onToken, stream: streamParam } = params
-  const stream = streamParam !== false
-  if (!xApiKey.trim()) {
-    throw new Error('请填写 apikey')
-  }
-  if (!authToken.trim()) {
-    throw new Error('请填写 token')
-  }
-
-  const headers = buildEnterpriseAuthHeaders(authToken.trim(), xApiKey.trim())
-  headers.set('Content-Type', 'application/json')
-  headers.set(
-    'Accept',
-    stream ? 'application/json, text/event-stream' : 'application/json',
-  )
-
-  const res = await fetch(ENTERPRISE_FIXED_CHAT_COMPLETIONS_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      stream,
-    }),
-    signal,
-  })
-
-  if (!res.ok) {
-    const t = await res.text().catch(() => '')
-    throw new Error(t || `chat/completions HTTP ${res.status}`)
-  }
-
-  await consumeLlmChatCompletionsResponse(res, onToken)
 }
 
 /**
