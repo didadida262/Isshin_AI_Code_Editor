@@ -3,6 +3,7 @@ import {
   faEllipsisH,
   faPlus,
   faXmark,
+  faBolt,
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useState } from 'react'
@@ -24,6 +25,8 @@ type Props = {
   onRegenerate: (index: number) => void
   onUserEditSubmit: (index: number, text: string) => void
   width?: number
+  agentMode?: boolean
+  onAgentModeChange?: (enabled: boolean) => void
 }
 
 type Tab = { id: string; label: string }
@@ -42,6 +45,8 @@ export function AiChatSidebar({
   onRegenerate,
   onUserEditSubmit,
   width = 340,
+  agentMode = false,
+  onAgentModeChange,
 }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([{ id: 'default', label: 'New Agent' }])
   const [activeTabId, setActiveTabId] = useState('default')
@@ -100,6 +105,21 @@ export function AiChatSidebar({
 
         {/* Right actions */}
         <div className="flex shrink-0 items-center gap-0.5 px-1.5">
+          {/* Agent mode toggle */}
+          <button
+            type="button"
+            title={agentMode ? 'Agent 模式（点击关闭）' : '切换到 Agent 模式（可直接修改文件）'}
+            onClick={() => onAgentModeChange?.(!agentMode)}
+            className={[
+              'flex h-6 items-center gap-1 rounded px-1.5 text-[11px] font-medium transition-colors',
+              agentMode
+                ? 'bg-[#1a6b4a]/30 text-[#4ade80] ring-1 ring-[#1a6b4a]/60 hover:bg-[#1a6b4a]/50'
+                : 'text-[#858585] hover:bg-[#3c3c3c] hover:text-[#cccccc]',
+            ].join(' ')}
+          >
+            <FontAwesomeIcon icon={faBolt} className="text-[10px]" />
+            <span>Agent</span>
+          </button>
           <button
             type="button"
             title="新建对话"
@@ -135,6 +155,14 @@ export function AiChatSidebar({
           compact
         />
       </div>
+
+      {/* Agent mode indicator */}
+      {agentMode && (
+        <div className="flex shrink-0 items-center gap-1.5 border-t border-[#3c3c3c] bg-[#1a6b4a]/10 px-3 py-1.5">
+          <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#4ade80] shadow-[0_0_6px_#4ade80]" />
+          <span className="text-[11px] text-[#4ade80]/80">Agent 模式 — 可直接读写编辑器文件</span>
+        </div>
+      )}
 
       {/* Input bar */}
       <InputBar

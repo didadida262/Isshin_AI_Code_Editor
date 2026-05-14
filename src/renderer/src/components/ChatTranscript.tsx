@@ -1,11 +1,91 @@
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useCallback, useState } from 'react'
-import type { ChatMessage } from '../api/client'
+import type { ChatMessage, AgentStep } from '../api/client'
 import { ChatGPTAvatar } from './ChatGPTAvatar'
 import { CopyIcon } from './CopyIcon'
 import { MarkdownContent } from './MarkdownContent'
 import { EditIcon } from './EditIcon'
 import { RegenerateIcon } from './RegenerateIcon'
+
+// ── Agent 步骤展示组件 ───────────────────────────────────────────────
+
+const TOOL_ICON: Record<string, string> = {
+  list_files: '📂',
+  read_file: '📖',
+  write_file: '✏️',
+}
+
+function AgentStepsPanel({ steps, isStreaming }: { steps: AgentStep[]; isStreaming: boolean }) {
+  const [expanded, setExpanded] = useState(true)
+  if (steps.length === 0 && !isStreaming) return null
+
+  const toolCallCount = steps.filter((s) => s.type === 'tool_call').length
+
+  return (
+    <div className="mb-2 rounded-lg border border-[#3c3c3c]/60 bg-[#1e1e1e]/60">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+      >
+        <span className="text-[10px] text-[#4ade80]/70">
+          {isStreaming && steps.length === 0 ? '▸' : expanded ? '▾' : '▸'}
+        </span>
+        <span className="text-[11px] text-[#858585]">
+          {isStreaming && steps.length === 0
+            ? '正在思考…'
+            : `已调用 ${toolCallCount} 个工具`}
+        </span>
+        {isStreaming && (
+          <span className="ml-auto flex gap-0.5">
+            {[0, 1, 2].map((d) => (
+              <motion.span
+                key={d}
+                className="h-1 w-1 rounded-full bg-[#4ade80]/60"
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: d * 0.2 }}
+              />
+            ))}
+          </span>
+        )}
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded && steps.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-col gap-0.5 border-t border-[#3c3c3c]/40 px-2.5 pb-2 pt-1.5">
+              {steps.map((step, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="mt-0.5 text-[11px] shrink-0">
+                    {step.type === 'tool_call'
+                      ? (TOOL_ICON[step.toolName ?? ''] ?? '🔧')
+                      : step.content.startsWith('错误') || step.content.startsWith('执行出错')
+                        ? '✗'
+                        : '✓'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className={[
+                      'text-[11px]',
+                      step.type === 'tool_call' ? 'text-[#7a9fc4]' : 'text-[#777777]',
+                    ].join(' ')}>
+                      {step.content}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
 
 type Props = {
   messages: ChatMessage[]
@@ -131,7 +211,15 @@ export function ChatTranscript({
                           <ChatGPTAvatar className="h-4 w-4" />
                         </div>
                         <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-left text-[13px] leading-relaxed text-[#cccccc]">
-                          {isStreamingThisAssistant && !m.content ? (
+                          {/* Agent 步骤面板 */}
+                          {(m.agentSteps?.length ?? 0) > 0 || (isStreamingThisAssistant && !m.content) ? (
+                            <AgentStepsPanel
+                              steps={m.agentSteps ?? []}
+                              isStreaming={isStreamingThisAssistant && !m.content}
+                            />
+                          ) : null}
+
+                          {isStreamingThisAssistant && !m.content && !(m.agentSteps?.length) ? (
                             <div
                               className="flex min-h-9 items-center"
                               aria-busy="true"
@@ -157,9 +245,9 @@ export function ChatTranscript({
                                 ))}
                               </span>
                             </div>
-                          ) : (
+                          ) : m.content ? (
                             <MarkdownContent content={m.content} />
-                          )}
+                          ) : null}
                           {!isStreamingThisAssistant ? (
                             <div className="flex flex-wrap items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                               <button

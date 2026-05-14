@@ -5,7 +5,9 @@ import type { ChatMessage, LlmModelOption } from './api/client'
 import {
   fetchLlmModels,
   streamLlmChatCompletions,
+  streamAgentFromPython,
 } from './api/enterprise'
+import type { AgentEvent } from './agent/types'
 import { ActivityBar } from './components/ActivityBar'
 import { AiChatSidebar } from './components/AiChatSidebar'
 import { EditorArea, fileNodeToTab } from './components/EditorArea'
@@ -44,6 +46,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState('')
   const [chatStreamEnabled, setChatStreamEnabled] = useState(true)
   const streamAbortRef = useRef<AbortController | null>(null)
+  const [agentMode, setAgentMode] = useState(false)
 
   // ── Warnings → Toast ─────────────────────────────────────────
   const prevWarningsLen = useRef(0)
@@ -216,14 +219,157 @@ export default function App() {
     [selectedModelPath, baseUrl, apiKey, chatStreamEnabled],
   )
 
+  // ── write_file 事件处理：Python agent 写入文件时同步到编辑器 ────────
+  const handleWriteFile = useCallback((path: string, content: string) => {
+    setTabs((prev) => {
+      const exists = prev.find((t) => t.id === path || t.name === path)
+      if (exists) {
+        return prev.map((t) =>
+          t.id === path || t.name === path
+            ? { ...t, content, isDirty: true }
+            : t,
+        )
+      }
+      const ext = path.split('.').pop() ?? ''
+      return [
+        ...prev,
+        { id: path, name: path.split('/').pop() ?? path, ext, content, isDirty: true },
+      ]
+    })
+    setActiveTabId(path)
+  }, [])
+
+  // ── Agent runner（调用 Python FastAPI 后端）────────────────────────
+  const runAgentStream = useCallback(
+    async (text: string, history: ChatMessage[]) => {
+      setStreaming(true)
+      setWarnings([])
+      const ac = new AbortController()
+      streamAbortRef.current = ac
+
+      const agentSteps: import('./api/client').AgentStep[] = []
+
+      // 将当前所有 editor tab 内容打包发给 Python 后端
+      const filesSnapshot: Record<string, string> = {}
+      tabs.forEach((t) => { filesSnapshot[t.id] = t.content })
+      const activeFilePath = tabs.find((t) => t.id === activeTabId)?.id ?? null
+
+      const llmHistory = history.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }))
+
+      try {
+        if (!baseUrl.trim()) throw new Error('请填写 baseUrl')
+        if (!selectedModelPath.trim()) throw new Error('请选择模型')
+        if (!apiKey.trim()) throw new Error('请填写 api_key')
+
+        await streamAgentFromPython(
+          {
+            userMessage: text,
+            history: llmHistory,
+            files: filesSnapshot,
+            activeFile: activeFilePath,
+            model: selectedModelPath,
+            baseUrl,
+            apiKey,
+            signal: ac.signal,
+          },
+          {
+            onStep: (event: AgentEvent) => {
+              if (event.type !== 'tool_call' && event.type !== 'tool_result') return
+              agentSteps.push({
+                type: event.type,
+                label: event.label,
+                content: event.content,
+                toolName: event.toolName,
+              })
+              setMessages((m) => {
+                const next = [...m]
+                const last = next[next.length - 1]
+                if (last?.role === 'assistant') {
+                  next[next.length - 1] = { ...last, agentSteps: [...agentSteps] }
+                }
+                return next
+              })
+            },
+            onWriteFile: handleWriteFile,
+            onToken: (token) => {
+              setMessages((m) => {
+                const next = [...m]
+                const last = next[next.length - 1]
+                if (last?.role === 'assistant') {
+                  next[next.length - 1] = {
+                    ...last,
+                    content: last.content + token,
+                    agentSteps: [...agentSteps],
+                  }
+                }
+                return next
+              })
+            },
+            onDone: () => {
+              streamAbortRef.current = null
+              setStreaming(false)
+            },
+            onError: (msg) => {
+              setWarnings((w) => [...w, msg])
+              setMessages((m) => {
+                const next = [...m]
+                const last = next[next.length - 1]
+                if (last?.role === 'assistant' && !last.content) {
+                  next[next.length - 1] = {
+                    role: 'assistant',
+                    content: `（错误）${msg}`,
+                    agentSteps: [...agentSteps],
+                  }
+                }
+                return next
+              })
+              streamAbortRef.current = null
+              setStreaming(false)
+            },
+          },
+        )
+      } catch (e) {
+        const aborted = e instanceof DOMException && e.name === 'AbortError'
+        if (aborted) {
+          setMessages((m) => {
+            const next = [...m]
+            const last = next[next.length - 1]
+            if (last?.role === 'assistant') {
+              const cur = last.content.trim()
+              next[next.length - 1] = {
+                ...last,
+                content: cur ? `${cur}\n\n（已停止生成）` : '（已停止生成）',
+                agentSteps: [...agentSteps],
+              }
+            }
+            return next
+          })
+        } else {
+          const msg = e instanceof Error ? e.message : '请求失败'
+          setWarnings((w) => [...w, msg])
+        }
+        streamAbortRef.current = null
+        setStreaming(false)
+      }
+    },
+    [baseUrl, apiKey, selectedModelPath, tabs, activeTabId, handleWriteFile],
+  )
+
   const send = useCallback(async () => {
     const text = input.trim()
     if (!text || streaming) return
     setInput('')
     const history = [...messages]
     setMessages((m) => [...m, { role: 'user', content: text }, { role: 'assistant', content: '' }])
-    await runStream(text, history)
-  }, [input, streaming, messages, runStream])
+    if (agentMode) {
+      await runAgentStream(text, history)
+    } else {
+      await runStream(text, history)
+    }
+  }, [input, streaming, messages, runStream, runAgentStream, agentMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const regenerateAt = useCallback(
     async (assistantIndex: number) => {
@@ -388,6 +534,8 @@ export default function App() {
           onRegenerate={regenerateAt}
           onUserEditSubmit={submitUserEdit}
           width={rightWidth}
+          agentMode={agentMode}
+          onAgentModeChange={setAgentMode}
         />
       </div>
 

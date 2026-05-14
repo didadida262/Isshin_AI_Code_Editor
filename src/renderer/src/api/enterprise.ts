@@ -437,3 +437,212 @@ export async function streamLlmChatCompletionsWithDocument(
 
   await consumeLlmChatCompletionsResponse(res, onToken)
 }
+
+// ── Tool-Calling（非流式）────────────────────────────────────────────
+
+import type { LlmMessage, LlmChatResponse, ToolDefinition } from '../agent/types'
+
+/**
+ * 非流式 LLM 调用，支持 OpenAI function-calling 协议。
+ * 对应 my_codegen_agent/nodes.py 中 model.invoke(prompt) 的工具化版本。
+ * 返回完整的 message 对象（含 tool_calls 或纯文本 content）。
+ */
+export async function callLlmWithTools(
+  baseUrl: string,
+  apiKey: string,
+  params: {
+    model: string
+    messages: LlmMessage[]
+    tools?: ToolDefinition[]
+    signal?: AbortSignal
+  },
+): Promise<LlmChatResponse> {
+  const { model, messages, tools, signal } = params
+
+  const llmApiPrefix = normalizeLlmApiPrefix(baseUrl)
+  if (!llmApiPrefix) throw new Error('baseUrl 不合法')
+  if (!apiKey.trim()) throw new Error('请填写 api_key')
+
+  const origin = getLocalMiddlewareOrigin().replace(/\/$/, '')
+  const url = `${origin}/enterprise/api/v1/chat/completions`
+
+  const headers = new Headers()
+  headers.set('Content-Type', 'application/json')
+  headers.set('Accept', 'application/json')
+  headers.set('Authorization', authorizationBearer(apiKey.trim()))
+  headers.set('X-Llm-Base-Url', llmApiPrefix)
+
+  const body: Record<string, unknown> = { model, messages, stream: false }
+  if (tools && tools.length > 0) {
+    body.tools = tools
+    body.tool_choice = 'auto'
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    let msg = text || `chat/completions HTTP ${res.status}`
+    try {
+      const j = JSON.parse(text) as { error?: { message?: string } }
+      if (j.error?.message) msg = j.error.message
+    } catch { /* keep */ }
+    throw new Error(msg)
+  }
+
+  const json = await res.json() as {
+    choices?: Array<{
+      message: LlmMessage
+      finish_reason: string
+    }>
+  }
+
+  const choice = json.choices?.[0]
+  if (!choice) throw new Error('模型未返回有效响应')
+
+  return {
+    message: choice.message,
+    finish_reason: choice.finish_reason ?? 'stop',
+  }
+}
+
+// ── Python Agent SSE 客户端 ──────────────────────────────────────────
+
+import type { AgentEvent } from '../agent/types'
+
+const AGENT_SERVER_URL = 'http://127.0.0.1:8788'
+
+export interface AgentStreamParams {
+  userMessage: string
+  history: Array<{ role: 'user' | 'assistant'; content: string }>
+  files: Record<string, string>
+  activeFile: string | null
+  model: string
+  baseUrl: string
+  apiKey: string
+  signal?: AbortSignal
+}
+
+export interface AgentStreamCallbacks {
+  onStep: (event: AgentEvent) => void
+  onWriteFile: (path: string, content: string) => void
+  onToken: (token: string) => void
+  onDone: () => void
+  onError: (msg: string) => void
+}
+
+/**
+ * 调用 Python FastAPI 后端 /agent/stream，消费 SSE 流。
+ * 生产模式下 Python 以 Tauri sidecar 运行；开发模式下手动启动：
+ *   cd backend && uvicorn main:app --port 8788 --reload
+ */
+export async function streamAgentFromPython(
+  params: AgentStreamParams,
+  callbacks: AgentStreamCallbacks,
+): Promise<void> {
+  const { userMessage, history, files, activeFile, model, baseUrl, apiKey, signal } = params
+  const { onStep, onWriteFile, onToken, onDone, onError } = callbacks
+
+  const res = await fetch(`${AGENT_SERVER_URL}/agent/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_message: userMessage,
+      history,
+      files,
+      active_file: activeFile,
+      model,
+      base_url: baseUrl,
+      api_key: apiKey,
+    }),
+    signal,
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `agent/stream HTTP ${res.status}`)
+  }
+
+  if (!res.body) throw new Error('agent/stream: 无响应体')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    // 按空行分割 SSE 消息块
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop() ?? ''
+
+    for (const part of parts) {
+      if (!part.trim()) continue
+
+      let eventType = 'message'
+      let dataLine = ''
+
+      for (const line of part.split('\n')) {
+        if (line.startsWith('event:')) {
+          eventType = line.slice(6).trim()
+        } else if (line.startsWith('data:')) {
+          dataLine = line.slice(5).trim()
+        }
+      }
+
+      if (!dataLine) continue
+
+      let data: Record<string, unknown>
+      try {
+        data = JSON.parse(dataLine) as Record<string, unknown>
+      } catch {
+        continue
+      }
+
+      switch (eventType) {
+        case 'tool_call':
+          onStep({
+            type: 'tool_call',
+            label: String(data.display ?? `调用工具: ${data.tool}`),
+            content: JSON.stringify(data.args ?? {}),
+            toolName: String(data.tool ?? ''),
+          })
+          break
+
+        case 'tool_result':
+          onStep({
+            type: 'tool_result',
+            label: String(data.display ?? '执行完成'),
+            content: String(data.display ?? ''),
+            toolName: String(data.tool ?? ''),
+          })
+          break
+
+        case 'write_file':
+          onWriteFile(String(data.path ?? ''), String(data.content ?? ''))
+          break
+
+        case 'token':
+          onToken(String(data.content ?? ''))
+          break
+
+        case 'done':
+          onDone()
+          return
+
+        case 'error':
+          onError(String(data.message ?? '未知错误'))
+          return
+      }
+    }
+  }
+
+  onDone()
+}

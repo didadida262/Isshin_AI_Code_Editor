@@ -12,7 +12,9 @@
     "lint": "eslint \"src/renderer/**/*.{ts,tsx}\"",
     "dev": "npm run tauri dev",
     "tauri": "tauri",
-    "build:tauri": "npm run build && tauri build"
+    "build:tauri": "npm run build && tauri build",
+    "dev:agent": "cd backend && python3 -m uvicorn main:app --host 127.0.0.1 --port 8788 --reload",
+    "agent:install": "cd backend && pip3 install -r requirements.txt"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
