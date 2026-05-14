@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+import config as cfg
 from agent.graph import build_graph
 from agent.schema import AgentGraphState, AgentRequest
 from agent.tools import FileStore
@@ -82,13 +83,17 @@ async def agent_stream(req: AgentRequest):
         queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
         loop = asyncio.get_event_loop()
 
-        # ── 初始化文件仓库和图 ───────────────────────────────────────
+        # ── 初始化文件仓库和图（前端值优先，空时回退到 config.py 默认值）──
         store = FileStore(req.files)
 
+        model_name = req.model.strip() or cfg.MODEL_NAME
+        base_url   = req.base_url.strip() or cfg.BASE_URL
+        api_key    = req.api_key.strip() or cfg.API_KEY
+
         graph = build_graph(
-            model_name=req.model,
-            base_url=req.base_url,
-            api_key=req.api_key,
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
             store=store,
             active_file=req.active_file,
         )

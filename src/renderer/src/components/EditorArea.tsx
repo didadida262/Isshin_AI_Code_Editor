@@ -5,6 +5,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import type { FileNode } from './FileExplorer'
+import type { EditorOptions } from './SettingsPanel'
+import { DEFAULT_EDITOR_OPTIONS } from './SettingsPanel'
 
 export type EditorTab = {
   id: string
@@ -20,6 +22,7 @@ type Props = {
   onTabClick: (id: string) => void
   onTabClose: (id: string) => void
   onContentChange: (id: string, value: string) => void
+  editorOptions?: EditorOptions
 }
 
 const EXT_LANGUAGE: Record<string, string> = {
@@ -84,6 +87,7 @@ export function EditorArea({
   onTabClick,
   onTabClose,
   onContentChange,
+  editorOptions = DEFAULT_EDITOR_OPTIONS,
 }: Props) {
   const activeTab = tabs.find((t) => t.id === activeTabId)
 
@@ -157,18 +161,19 @@ export function EditorArea({
             onChange={(val) => onContentChange(activeTab.id, val ?? '')}
             theme="vs-dark"
             options={{
-              fontSize: 13,
-              fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
-              fontLigatures: true,
-              lineHeight: 20,
-              minimap: { enabled: true },
+              fontSize: editorOptions.fontSize,
+              fontFamily: editorOptions.fontFamily,
+              fontLigatures: editorOptions.fontLigatures,
+              lineHeight: Math.round(editorOptions.fontSize * 1.55),
+              minimap: { enabled: editorOptions.minimap },
               scrollBeyondLastLine: false,
-              renderWhitespace: 'selection',
+              renderWhitespace: editorOptions.renderWhitespace,
               smoothScrolling: true,
-              cursorBlinking: 'phase',
+              cursorBlinking: editorOptions.cursorBlinking,
               cursorSmoothCaretAnimation: 'on',
-              tabSize: 2,
-              wordWrap: 'on',
+              tabSize: editorOptions.tabSize,
+              wordWrap: editorOptions.wordWrap,
+              lineNumbers: editorOptions.lineNumbers,
               padding: { top: 12, bottom: 12 },
               overviewRulerBorder: false,
               hideCursorInOverviewRuler: true,

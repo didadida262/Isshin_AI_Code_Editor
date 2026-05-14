@@ -19,10 +19,11 @@ LangGraph StateGraph 主循环
 
 from __future__ import annotations
 
+import config as cfg
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, StateGraph
 
-from .nodes import MAX_ITERATIONS, make_nodes
+from .nodes import make_nodes
 from .schema import AgentGraphState
 from .tools import FileStore
 
@@ -54,7 +55,7 @@ def build_graph(
         if (
             isinstance(last, AIMessage)
             and last.tool_calls
-            and state["iterations"] < MAX_ITERATIONS
+            and state["iterations"] < cfg.MAX_ITERATIONS
         ):
             return "execute"
         return "end"

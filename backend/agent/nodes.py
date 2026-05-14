@@ -16,10 +16,9 @@ from typing import List
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
+import config as cfg
 from .schema import AgentGraphState
 from .tools import FileStore, make_tools
-
-MAX_ITERATIONS = 8
 
 
 def _build_system_prompt(store: FileStore, active_file: str | None) -> str:

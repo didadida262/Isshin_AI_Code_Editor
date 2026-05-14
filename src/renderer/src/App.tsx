@@ -16,12 +16,15 @@ import { FileExplorer } from './components/FileExplorer'
 import type { FileNode } from './components/FileExplorer'
 import { StatusBar } from './components/StatusBar'
 import { ToastContainer, useToast } from './components/Toast'
+import { SettingsPanel, DEFAULT_EDITOR_OPTIONS } from './components/SettingsPanel'
+import type { EditorOptions } from './components/SettingsPanel'
 
 const MODEL_PATH_STORAGE_KEY = 'private-rag-gguf-path'
 const API_KEY_STORAGE_KEY = 'private-rag-header-api-key'
 const BASE_URL_STORAGE_KEY = 'private-rag-llm-base-url'
 const CHAT_STREAM_STORAGE_KEY = 'private-rag-llm-chat-stream'
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'private-rag-header-token'
+const EDITOR_OPTIONS_STORAGE_KEY = 'private-rag-editor-options'
 
 type ActiveSection = 'explorer' | 'search' | 'git' | 'extensions' | 'chat'
 
@@ -31,6 +34,8 @@ export default function App() {
   const [tabs, setTabs] = useState<EditorTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [activeFileId, setActiveFileId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [editorOptions, setEditorOptions] = useState<EditorOptions>(DEFAULT_EDITOR_OPTIONS)
 
   // ── Toast ─────────────────────────────────────────────────────
   const { toasts, push: pushToast, dismiss: dismissToast } = useToast()
@@ -64,6 +69,12 @@ export default function App() {
       setApiKey(localStorage.getItem(API_KEY_STORAGE_KEY) ?? '')
       const streamStored = localStorage.getItem(CHAT_STREAM_STORAGE_KEY)
       setChatStreamEnabled(streamStored !== '0')
+      const editorStored = localStorage.getItem(EDITOR_OPTIONS_STORAGE_KEY)
+      if (editorStored) {
+        try {
+          setEditorOptions({ ...DEFAULT_EDITOR_OPTIONS, ...JSON.parse(editorStored) })
+        } catch { /* ignore malformed */ }
+      }
     } catch { /* ignore */ }
   }, [])
 
@@ -124,6 +135,27 @@ export default function App() {
     }, 400)
     return () => window.clearTimeout(id)
   }, [apiKey, loadLlmModels])
+
+  // ── Settings handlers ─────────────────────────────────────────
+  const handleBaseUrlChange = useCallback((v: string) => {
+    setBaseUrl(v)
+    try { localStorage.setItem(BASE_URL_STORAGE_KEY, v) } catch { /* ignore */ }
+  }, [])
+
+  const handleApiKeyChange = useCallback((v: string) => {
+    setApiKey(v)
+    try { localStorage.setItem(API_KEY_STORAGE_KEY, v) } catch { /* ignore */ }
+  }, [])
+
+  const handleChatStreamChange = useCallback((v: boolean) => {
+    setChatStreamEnabled(v)
+    try { localStorage.setItem(CHAT_STREAM_STORAGE_KEY, v ? '1' : '0') } catch { /* ignore */ }
+  }, [])
+
+  const handleEditorOptionsChange = useCallback((opts: EditorOptions) => {
+    setEditorOptions(opts)
+    try { localStorage.setItem(EDITOR_OPTIONS_STORAGE_KEY, JSON.stringify(opts)) } catch { /* ignore */ }
+  }, [])
 
   // ── Editor handlers ───────────────────────────────────────────
   const handleFileClick = useCallback((node: FileNode) => {
@@ -459,6 +491,7 @@ export default function App() {
           <button
             type="button"
             title="设置"
+            onClick={() => setSettingsOpen(true)}
             className="flex h-6 w-6 items-center justify-center rounded text-[#858585] transition-colors hover:bg-[#3c3c3c] hover:text-[#cccccc]"
           >
             <FontAwesomeIcon icon={faCog} className="text-[12px]" />
@@ -509,6 +542,7 @@ export default function App() {
           }}
           onTabClose={handleTabClose}
           onContentChange={handleContentChange}
+          editorOptions={editorOptions}
         />
 
         {/* Right resize handle */}
@@ -549,6 +583,20 @@ export default function App() {
 
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Settings panel */}
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        baseUrl={baseUrl}
+        apiKey={apiKey}
+        chatStreamEnabled={chatStreamEnabled}
+        onBaseUrlChange={handleBaseUrlChange}
+        onApiKeyChange={handleApiKeyChange}
+        onChatStreamChange={handleChatStreamChange}
+        editorOptions={editorOptions}
+        onEditorOptionsChange={handleEditorOptionsChange}
+      />
     </div>
   )
 }

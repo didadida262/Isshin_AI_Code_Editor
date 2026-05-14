@@ -37,7 +37,7 @@ class AgentRequest(BaseModel):
     files: Dict[str, str] = {}
     # 当前激活文件路径
     active_file: Optional[str] = None
-    # LLM 配置（由前端透传）
-    model: str
-    base_url: str   # 如 https://aiplatform.njsrd.com
-    api_key: str
+    # LLM 配置（前端传入优先；留空时自动使用 config.py 默认值）
+    model: str = ""
+    base_url: str = ""   # 如 https://aiplatform.njsrd.com/llm/v1
+    api_key: str = ""
