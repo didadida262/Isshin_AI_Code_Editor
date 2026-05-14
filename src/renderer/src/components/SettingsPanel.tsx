@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faXmark, faServer, faCode, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { faXmark, faServer, faCode, faCheck, faRobot, faMagnifyingGlass, faRotate } from '@fortawesome/free-solid-svg-icons'
+import type { LlmModelOption } from '../api/client'
 
 export type EditorOptions = {
   fontSize: number
@@ -26,7 +27,7 @@ export const DEFAULT_EDITOR_OPTIONS: EditorOptions = {
   cursorBlinking: 'phase',
 }
 
-type SectionId = 'llm' | 'editor'
+type SectionId = 'llm' | 'editor' | 'models'
 
 type Props = {
   open: boolean
@@ -37,6 +38,10 @@ type Props = {
   onApiKeyChange: (v: string) => void
   editorOptions: EditorOptions
   onEditorOptionsChange: (opts: EditorOptions) => void
+  llmModels: LlmModelOption[]
+  enabledModelPaths: string[]
+  onEnabledModelsChange: (paths: string[]) => void
+  onRefreshModels: () => void
 }
 
 // ── Primitives ────────────────────────────────────────────────────────────────
@@ -82,11 +87,13 @@ function TextInput({
 function Toggle({
   checked,
   onChange,
-  label,
+  label = '',
+  green = false,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
-  label: string
+  label?: string
+  green?: boolean
 }) {
   return (
     <button
@@ -96,18 +103,18 @@ function Toggle({
     >
       <div
         className={[
-          'relative h-4 w-7 shrink-0 rounded-full transition-colors',
-          checked ? 'bg-[#0078d4]' : 'bg-[#5a5a5a]',
+          'relative h-[22px] w-10 shrink-0 rounded-full transition-colors',
+          checked ? (green ? 'bg-[#22c55e]' : 'bg-[#0078d4]') : 'bg-[#5a5a5a]',
         ].join(' ')}
       >
         <span
           className={[
-            'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform',
-            checked ? 'translate-x-3.5' : 'translate-x-0.5',
+            'absolute top-[3px] h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+            checked ? 'translate-x-[22px]' : 'translate-x-[3px]',
           ].join(' ')}
         />
       </div>
-      <span className="text-[13px] text-[#cccccc]">{label}</span>
+      {label && <span className="text-[13px] text-[#cccccc]">{label}</span>}
     </button>
   )
 }
@@ -173,6 +180,10 @@ export function SettingsPanel({
   onApiKeyChange,
   editorOptions,
   onEditorOptionsChange,
+  llmModels,
+  enabledModelPaths,
+  onEnabledModelsChange,
+  onRefreshModels,
 }: Props) {
   const [activeTab, setActiveTab] = useState<SectionId>('llm')
 
@@ -181,6 +192,7 @@ export function SettingsPanel({
   const [draftApiKey, setDraftApiKey] = useState(apiKey)
   const [draftEditor, setDraftEditor] = useState<EditorOptions>(editorOptions)
   const [applied, setApplied] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
 
   // Reset draft to current committed values whenever panel opens
   useEffect(() => {
@@ -223,7 +235,7 @@ export function SettingsPanel({
     setDraftEditor((prev) => ({ ...prev, [key]: val }))
   }
 
-  const tabDirty: Record<SectionId, boolean> = { llm: llmDirty, editor: editorDirty }
+  const tabDirty: Record<SectionId, boolean> = { llm: llmDirty, editor: editorDirty, models: false }
 
   return (
     <div
@@ -241,6 +253,7 @@ export function SettingsPanel({
             [
               { id: 'llm' as SectionId, label: 'LLM 连接', icon: faServer },
               { id: 'editor' as SectionId, label: '编辑器', icon: faCode },
+              { id: 'models' as SectionId, label: '模型', icon: faRobot },
             ] as const
           ).map((s) => (
             <button
@@ -268,7 +281,7 @@ export function SettingsPanel({
           {/* Header */}
           <div className="flex h-10 shrink-0 items-center justify-between border-b border-[#3c3c3c] px-5">
             <span className="text-[13px] font-semibold text-[#cccccc]">
-              {activeTab === 'llm' ? 'LLM 连接' : '编辑器'}
+              {activeTab === 'llm' ? 'LLM 连接' : activeTab === 'editor' ? '编辑器' : '模型'}
             </span>
             <button
               type="button"
@@ -312,6 +325,74 @@ export function SettingsPanel({
 
               </>
             )}
+
+            {activeTab === 'models' && (() => {
+              const filtered = llmModels.filter((m) =>
+                m.label.toLowerCase().includes(modelSearch.toLowerCase()) ||
+                m.path.toLowerCase().includes(modelSearch.toLowerCase())
+              )
+              return (
+                <>
+                  {/* Search + refresh bar */}
+                  <div className="flex items-center gap-2 border-b border-[#2a2a2a] py-3">
+                    <div className="relative flex-1">
+                      <FontAwesomeIcon
+                        icon={faMagnifyingGlass}
+                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-[#5a5a5a]"
+                      />
+                      <input
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                        placeholder="添加或搜索模型"
+                        className="w-full rounded border border-[#3c3c3c] bg-[#2d2d2d] py-1.5 pl-7 pr-2.5 text-[13px] text-[#cccccc] placeholder-[#5a5a5a] outline-none transition-colors focus:border-[#555555]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onRefreshModels}
+                      title="刷新模型列表"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#3c3c3c] bg-[#2d2d2d] text-[#858585] transition-colors hover:border-[#555555] hover:text-[#cccccc]"
+                    >
+                      <FontAwesomeIcon icon={faRotate} className="text-[12px]" />
+                    </button>
+                  </div>
+
+                  {/* Model list */}
+                  <div className="py-1">
+                    {filtered.length === 0 && (
+                      <p className="py-8 text-center text-[12px] text-[#5a5a5a]">
+                        {llmModels.length === 0
+                          ? '请先配置 API Key 并应用'
+                          : '未找到匹配的模型'}
+                      </p>
+                    )}
+                    {filtered.map((model) => {
+                      const enabled = enabledModelPaths.includes(model.path)
+                      return (
+                        <div
+                          key={model.path}
+                          className="flex items-center gap-3 border-b border-[#2a2a2a] py-2.5 last:border-0"
+                        >
+                          <span className="flex-1 truncate text-[13px] text-[#cccccc]">
+                            {model.label}
+                          </span>
+                          <Toggle
+                            checked={enabled}
+                            green
+                            onChange={(v) => {
+                              const next = v
+                                ? [...enabledModelPaths, model.path]
+                                : enabledModelPaths.filter((p) => p !== model.path)
+                              onEnabledModelsChange(next)
+                            }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )
+            })()}
 
             {activeTab === 'editor' && (
               <>
@@ -415,7 +496,8 @@ export function SettingsPanel({
             )}
           </div>
 
-          {/* Footer: Apply / Cancel */}
+          {/* Footer: Apply / Cancel — hidden for models tab (changes are immediate) */}
+          {activeTab !== 'models' && (
           <div className="flex shrink-0 items-center justify-between border-t border-[#3c3c3c] px-5 py-3">
             <span className="text-[11px] text-[#5a5a5a]">
               {isDirty
@@ -462,6 +544,7 @@ export function SettingsPanel({
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

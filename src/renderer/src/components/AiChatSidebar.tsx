@@ -143,6 +143,9 @@ export function AiChatSidebar({
         onSubmit={onSubmit}
         streaming={streaming}
         onStop={onStop}
+        models={llmModels}
+        selectedModelPath={selectedModelPath}
+        onModelChange={onModelChange}
       />
     </aside>
   )

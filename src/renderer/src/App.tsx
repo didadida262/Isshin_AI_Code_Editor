@@ -23,6 +23,7 @@ const API_KEY_STORAGE_KEY = 'private-rag-header-api-key'
 const BASE_URL_STORAGE_KEY = 'private-rag-llm-base-url'
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'private-rag-header-token'
 const EDITOR_OPTIONS_STORAGE_KEY = 'private-rag-editor-options'
+const DISABLED_MODELS_STORAGE_KEY = 'private-rag-disabled-models'
 
 type ActiveSection = 'explorer' | 'search' | 'git' | 'extensions' | 'chat'
 
@@ -45,6 +46,7 @@ export default function App() {
   const [warnings, setWarnings] = useState<string[]>([])
   const [llmModels, setLlmModels] = useState<LlmModelOption[]>([])
   const [selectedModelPath, setSelectedModelPath] = useState('')
+  const [disabledModelPaths, setDisabledModelPaths] = useState<string[]>([])
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const streamAbortRef = useRef<AbortController | null>(null)
@@ -67,6 +69,12 @@ export default function App() {
       if (editorStored) {
         try {
           setEditorOptions({ ...DEFAULT_EDITOR_OPTIONS, ...JSON.parse(editorStored) })
+        } catch { /* ignore malformed */ }
+      }
+      const disabledStored = localStorage.getItem(DISABLED_MODELS_STORAGE_KEY)
+      if (disabledStored) {
+        try {
+          setDisabledModelPaths(JSON.parse(disabledStored) as string[])
         } catch { /* ignore malformed */ }
       }
     } catch { /* ignore */ }
@@ -145,6 +153,16 @@ export default function App() {
     setEditorOptions(opts)
     try { localStorage.setItem(EDITOR_OPTIONS_STORAGE_KEY, JSON.stringify(opts)) } catch { /* ignore */ }
   }, [])
+
+  const handleEnabledModelsChange = useCallback((enabledPaths: string[]) => {
+    const disabled = llmModels.map((m) => m.path).filter((p) => !enabledPaths.includes(p))
+    setDisabledModelPaths(disabled)
+    try { localStorage.setItem(DISABLED_MODELS_STORAGE_KEY, JSON.stringify(disabled)) } catch { /* ignore */ }
+  }, [llmModels])
+
+  const handleRefreshModels = useCallback(() => {
+    if (apiKey.trim()) void loadLlmModels(apiKey)
+  }, [apiKey, loadLlmModels])
 
   // ── Editor handlers ───────────────────────────────────────────
   const handleFileClick = useCallback((node: FileNode) => {
@@ -484,7 +502,7 @@ export default function App() {
           warnings={warnings}
           streaming={streaming}
           input={input}
-          llmModels={llmModels}
+          llmModels={llmModels.filter((m) => !disabledModelPaths.includes(m.path))}
           selectedModelPath={selectedModelPath}
           onModelChange={setSelectedModelPath}
           onInputChange={setInput}
@@ -517,6 +535,10 @@ export default function App() {
         onApiKeyChange={handleApiKeyChange}
         editorOptions={editorOptions}
         onEditorOptionsChange={handleEditorOptionsChange}
+        llmModels={llmModels}
+        enabledModelPaths={llmModels.map((m) => m.path).filter((p) => !disabledModelPaths.includes(p))}
+        onEnabledModelsChange={handleEnabledModelsChange}
+        onRefreshModels={handleRefreshModels}
       />
     </div>
   )
