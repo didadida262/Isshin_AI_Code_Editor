@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { useCallback, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { ChatMessage, AgentStep } from '../api/client'
 import { ChatGPTAvatar } from './ChatGPTAvatar'
 import { CopyIcon } from './CopyIcon'
@@ -31,23 +31,25 @@ function AgentStepsPanel({ steps, isStreaming }: { steps: AgentStep[]; isStreami
         <span className="text-[10px] text-[#4ade80]/70">
           {isStreaming && steps.length === 0 ? '▸' : expanded ? '▾' : '▸'}
         </span>
-        <span className="text-[11px] text-[#858585]">
-          {isStreaming && steps.length === 0
-            ? '正在思考…'
-            : `已调用 ${toolCallCount} 个工具`}
+        <span className="min-w-0 flex-1 text-[11px] text-[#858585]">
+          {isStreaming && steps.length === 0 ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span>正在思考…</span>
+              <span className="inline-flex items-center gap-[3px]">
+                {[0, 1, 2].map((d) => (
+                  <motion.span
+                    key={d}
+                    className="h-[3px] w-[3px] shrink-0 rounded-full bg-cyan-400/55"
+                    animate={{ opacity: [0.25, 0.85, 0.25] }}
+                    transition={{ duration: 0.9, repeat: Infinity, delay: d * 0.18 }}
+                  />
+                ))}
+              </span>
+            </span>
+          ) : (
+            `已调用 ${toolCallCount} 个工具`
+          )}
         </span>
-        {isStreaming && (
-          <span className="ml-auto flex gap-0.5">
-            {[0, 1, 2].map((d) => (
-              <motion.span
-                key={d}
-                className="h-1 w-1 rounded-full bg-[#4ade80]/60"
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 0.8, repeat: Infinity, delay: d * 0.2 }}
-              />
-            ))}
-          </span>
-        )}
       </button>
 
       <AnimatePresence initial={false}>
@@ -149,6 +151,15 @@ export function ChatTranscript({
     setEditDraft('')
   }, [editingUserIndex, editDraft, onUserEditSubmit])
 
+  const transcriptScrollRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (messages.length === 0) return
+    const el = transcriptScrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [messages, streaming])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col">
@@ -175,7 +186,10 @@ export function ChatTranscript({
             </motion.div>
           </div>
         ) : (
-          <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${compact ? 'px-3 py-3' : 'px-5 py-4 sm:px-8'}`}>
+          <div
+            ref={transcriptScrollRef}
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${compact ? 'px-3 py-3' : 'px-5 py-4 sm:px-8'}`}
+          >
             <ul className={`flex w-full flex-col ${compact ? '' : 'mx-auto max-w-3xl'}`}>
               {messages.map((m, i) => {
                 const isStreamingThisAssistant =
@@ -219,33 +233,7 @@ export function ChatTranscript({
                             />
                           ) : null}
 
-                          {isStreamingThisAssistant && !m.content && !(m.agentSteps?.length) ? (
-                            <div
-                              className="flex min-h-9 items-center"
-                              aria-busy="true"
-                              aria-label="正在生成"
-                            >
-                              <span className="inline-flex items-center gap-1.5">
-                                {[0, 1, 2].map((dot) => (
-                                  <motion.span
-                                    key={dot}
-                                    className="h-2 w-2 rounded-full bg-cyan-500 dark:bg-cyan-400"
-                                    animate={{
-                                      y: [0, -5, 0],
-                                      opacity: [0.35, 1, 0.35],
-                                      scale: [0.92, 1, 0.92],
-                                    }}
-                                    transition={{
-                                      duration: 0.55,
-                                      repeat: Infinity,
-                                      ease: 'easeInOut',
-                                      delay: dot * 0.14,
-                                    }}
-                                  />
-                                ))}
-                              </span>
-                            </div>
-                          ) : m.content ? (
+                          {isStreamingThisAssistant && !m.content ? null : m.content ? (
                             <MarkdownContent content={m.content} />
                           ) : null}
                           {!isStreamingThisAssistant ? (

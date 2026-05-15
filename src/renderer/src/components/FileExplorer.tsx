@@ -194,13 +194,7 @@ const MOCK_TREE: FileNode[] = [
 export function FileExplorer({ activeFileId, onFileClick }: Omit<Props, 'tree'>) {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#252526]">
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-[#3c3c3c] px-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#bbbbbb]">
-          资源管理器
-        </span>
-      </div>
-
-      <div className="flex h-7 shrink-0 items-center border-b border-[#3c3c3c] px-3">
+      <div className="flex h-9 shrink-0 items-center border-b border-[#3c3c3c] px-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-[#bbbbbb]">
           project_rag
         </span>
