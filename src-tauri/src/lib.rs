@@ -63,6 +63,7 @@ pub fn run() {
             commands::open_folder_dialog,
             commands::read_dir_tree,
             commands::read_file_content,
+            commands::workspace_search,
             terminal::create_terminal,
             terminal::write_terminal,
             terminal::resize_terminal,

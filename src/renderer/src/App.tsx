@@ -14,6 +14,7 @@ import { AiChatSidebar } from './components/AiChatSidebar'
 import { EditorArea } from './components/EditorArea'
 import type { EditorTab } from './components/EditorArea'
 import { FileExplorer } from './components/FileExplorer'
+import { SearchPanel } from './components/SearchPanel'
 import type { FileNode } from './components/FileExplorer'
 import { StatusBar } from './components/StatusBar'
 import { TerminalPanel } from './components/TerminalPanel'
@@ -551,13 +552,25 @@ export default function App() {
         {finalShowSidePanel && (
           <>
             <div className="shrink-0 overflow-hidden" style={{ width: leftWidth }}>
-              <FileExplorer
-                tree={fileTree}
-                folderName={folderPath ? folderPath.split('/').pop() ?? folderPath : null}
-                activeFileId={activeFileId}
-                onFileClick={handleFileClick}
-                onOpenFolder={handleOpenFolder}
-              />
+              {activeSection === 'search' ? (
+                <SearchPanel
+                  folderPath={folderPath}
+                  onOpenFolder={handleOpenFolder}
+                  onOpenResult={(path) => {
+                    const name = path.split(/[/\\]/).pop() ?? path
+                    const ext = name.includes('.') ? name.split('.').pop() : undefined
+                    void handleFileClick({ id: path, name, type: 'file', ext })
+                  }}
+                />
+              ) : (
+                <FileExplorer
+                  tree={fileTree}
+                  folderName={folderPath ? folderPath.split('/').pop() ?? folderPath : null}
+                  activeFileId={activeFileId}
+                  onFileClick={handleFileClick}
+                  onOpenFolder={handleOpenFolder}
+                />
+              )}
             </div>
             {/* Left resize handle */}
             <div
