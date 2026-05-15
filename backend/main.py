@@ -90,12 +90,20 @@ async def agent_stream(req: AgentRequest):
         base_url   = req.base_url.strip() or cfg.BASE_URL
         api_key    = req.api_key.strip() or cfg.API_KEY
 
+        # on_token 回调：在线程池中被调用，通过 call_soon_threadsafe 推入 async queue
+        def on_token(text: str) -> None:
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                ("token", {"content": text}),
+            )
+
         graph = build_graph(
             model_name=model_name,
             base_url=base_url,
             api_key=api_key,
             store=store,
             active_file=req.active_file,
+            on_token=on_token,
         )
 
         # ── 构建初始消息列表 ─────────────────────────────────────────
@@ -145,12 +153,7 @@ async def agent_stream(req: AgentRequest):
                                                 },
                                             ),
                                         )
-                                elif msg.content:
-                                    # 最终回答（无 tool_calls）
-                                    loop.call_soon_threadsafe(
-                                        queue.put_nowait,
-                                        ("token", {"content": msg.content}),
-                                    )
+                                # 文本回答已由 on_token 回调逐 token 推送，此处无需重复发送
 
                         elif node_name == "execute":
                             for msg in messages:

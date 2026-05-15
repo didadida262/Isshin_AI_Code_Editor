@@ -49,10 +49,12 @@ def make_nodes(
     api_key: str,
     store: FileStore,
     active_file: str | None = None,
+    on_token=None,
 ):
     """
     创建 generate_node 和 execute_node 的工厂函数。
     返回 (generate_node, execute_node) 元组。
+    on_token: 可选回调，接收每个文本 token 字符串，用于 SSE 实时推流。
     """
     tools = make_tools(store)
     tool_map = {t.name: t for t in tools}
@@ -67,7 +69,7 @@ def make_nodes(
         model=model_name,
         base_url=_base,
         api_key=api_key,
-        streaming=False,
+        streaming=True,
     ).bind_tools(tools)
 
     system_msg = SystemMessage(content=_build_system_prompt(store, active_file))
@@ -76,11 +78,33 @@ def make_nodes(
 
     def generate_node(state: AgentGraphState) -> dict:
         """
-        调用 LLM，传入完整消息历史（含 system prompt）。
-        对应 my_codegen_agent/nodes.py 中的 generate_code_node。
+        调用 LLM 并逐 token 流式推送文本内容。
+        工具调用（tool_calls）时不推送 token，仅在纯文本回答时流式输出。
         """
         messages = [system_msg] + list(state["messages"])
-        response: AIMessage = llm.invoke(messages)
+
+        accumulated = None
+        is_tool_call_mode = False
+
+        for chunk in llm.stream(messages):
+            # 一旦出现 tool_call_chunks 说明本次是工具调用，停止推送文本 token
+            if getattr(chunk, "tool_call_chunks", None):
+                is_tool_call_mode = True
+
+            if not is_tool_call_mode and chunk.content and on_token:
+                on_token(chunk.content)
+
+            accumulated = chunk if accumulated is None else accumulated + chunk
+
+        # 将累积的 AIMessageChunk 转换为完整 AIMessage
+        if accumulated is None:
+            response = AIMessage(content="")
+        else:
+            response = AIMessage(
+                content=accumulated.content or "",
+                tool_calls=list(accumulated.tool_calls) if accumulated.tool_calls else [],
+            )
+
         return {
             "messages": [response],
             "iterations": state.get("iterations", 0),

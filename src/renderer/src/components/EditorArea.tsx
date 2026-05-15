@@ -4,7 +4,6 @@ import {
   faTimes,
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import type { FileNode } from './FileExplorer'
 import type { EditorOptions } from './SettingsPanel'
 import { DEFAULT_EDITOR_OPTIONS } from './SettingsPanel'
 
@@ -72,14 +71,6 @@ const WELCOME_CONTENT = `// 欢迎使用 Isshin AI Code Editor
 
 `
 
-export function fileNodeToTab(node: FileNode): EditorTab {
-  return {
-    id: node.id,
-    name: node.name,
-    ext: node.ext,
-    content: WELCOME_CONTENT,
-  }
-}
 
 export function EditorArea({
   tabs,

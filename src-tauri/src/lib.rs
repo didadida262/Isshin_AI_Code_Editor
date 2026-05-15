@@ -5,6 +5,7 @@ mod error;
 mod gateway;
 mod proxy;
 mod state;
+mod terminal;
 mod upstream;
 
 use tauri::Manager;
@@ -36,6 +37,7 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .manage(AgentSidecar(std::sync::Mutex::new(None)))
+        .manage(terminal::TerminalManager::new())
         .setup(|app| {
             // 仅在生产包中自动拉起 agent-server sidecar；
             // 开发阶段请手动执行：cd backend && uvicorn main:app --port 8788 --reload
@@ -56,7 +58,16 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::get_api_base_url])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_api_base_url,
+            commands::open_folder_dialog,
+            commands::read_dir_tree,
+            commands::read_file_content,
+            terminal::create_terminal,
+            terminal::write_terminal,
+            terminal::resize_terminal,
+            terminal::destroy_terminal,
+        ])
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _app_handle = window.app_handle();

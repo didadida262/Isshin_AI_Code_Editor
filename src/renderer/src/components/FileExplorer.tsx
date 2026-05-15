@@ -4,6 +4,7 @@ import {
   faFile,
   faFolder,
   faFolderOpen,
+  faFolderPlus,
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useState } from 'react'
@@ -18,8 +19,10 @@ export type FileNode = {
 
 type Props = {
   tree: FileNode[]
+  folderName: string | null
   activeFileId: string | null
   onFileClick: (node: FileNode) => void
+  onOpenFolder: () => void
 }
 
 const EXT_COLOR: Record<string, string> = {
@@ -42,7 +45,7 @@ function getExtColor(ext?: string) {
   return EXT_COLOR[ext.toLowerCase()] ?? '#858585'
 }
 
-function FileIcon({ node }: { node: FileNode; open?: boolean }) {
+function FileIcon({ node }: { node: FileNode }) {
   if (node.type === 'dir') return null
   return (
     <FontAwesomeIcon
@@ -118,99 +121,50 @@ function TreeNode({
   )
 }
 
-const MOCK_TREE: FileNode[] = [
-  {
-    id: 'src',
-    name: 'src',
-    type: 'dir',
-    children: [
-      {
-        id: 'renderer',
-        name: 'renderer',
-        type: 'dir',
-        children: [
-          {
-            id: 'src2',
-            name: 'src',
-            type: 'dir',
-            children: [
-              {
-                id: 'api',
-                name: 'api',
-                type: 'dir',
-                children: [
-                  { id: 'client.ts', name: 'client.ts', type: 'file', ext: 'ts' },
-                  { id: 'enterprise.ts', name: 'enterprise.ts', type: 'file', ext: 'ts' },
-                ],
-              },
-              {
-                id: 'components',
-                name: 'components',
-                type: 'dir',
-                children: [
-                  { id: 'ActivityBar.tsx', name: 'ActivityBar.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'AppBackground.tsx', name: 'AppBackground.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'ChatTranscript.tsx', name: 'ChatTranscript.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'EditorArea.tsx', name: 'EditorArea.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'FileExplorer.tsx', name: 'FileExplorer.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'InputBar.tsx', name: 'InputBar.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'MarkdownContent.tsx', name: 'MarkdownContent.tsx', type: 'file', ext: 'tsx' },
-                  { id: 'StatusBar.tsx', name: 'StatusBar.tsx', type: 'file', ext: 'tsx' },
-                ],
-              },
-              { id: 'App.tsx', name: 'App.tsx', type: 'file', ext: 'tsx' },
-              { id: 'main.tsx', name: 'main.tsx', type: 'file', ext: 'tsx' },
-              { id: 'index.css', name: 'index.css', type: 'file', ext: 'css' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'src-tauri',
-        name: 'src-tauri',
-        type: 'dir',
-        children: [
-          {
-            id: 'tauri-src',
-            name: 'src',
-            type: 'dir',
-            children: [
-              { id: 'gateway.rs', name: 'gateway.rs', type: 'file', ext: 'rs' },
-              { id: 'document.rs', name: 'document.rs', type: 'file', ext: 'rs' },
-              { id: 'lib.rs', name: 'lib.rs', type: 'file', ext: 'rs' },
-            ],
-          },
-          { id: 'Cargo.toml', name: 'Cargo.toml', type: 'file', ext: 'toml' },
-          { id: 'tauri.conf.json', name: 'tauri.conf.json', type: 'file', ext: 'json' },
-        ],
-      },
-    ],
-  },
-  { id: 'package.json', name: 'package.json', type: 'file', ext: 'json' },
-  { id: 'README.md', name: 'README.md', type: 'file', ext: 'md' },
-  { id: '.gitignore', name: '.gitignore', type: 'file' },
-]
-
-export function FileExplorer({ activeFileId, onFileClick }: Omit<Props, 'tree'>) {
+export function FileExplorer({ tree, folderName, activeFileId, onFileClick, onOpenFolder }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#252526]">
-      <div className="flex h-9 shrink-0 items-center border-b border-[#3c3c3c] px-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#bbbbbb]">
-          project_rag
+      {/* 标题栏 */}
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-[#3c3c3c] px-3">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-[#bbbbbb]">
+          {folderName ?? '未打开文件夹'}
         </span>
+        <button
+          type="button"
+          title="打开文件夹"
+          onClick={onOpenFolder}
+          className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#858585] transition-colors hover:bg-[#3c3c3c] hover:text-[#cccccc]"
+        >
+          <FontAwesomeIcon icon={faFolderPlus} className="text-[11px]" />
+        </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {MOCK_TREE.map((node) => (
-          <TreeNode
-            key={node.id}
-            node={node}
-            depth={0}
-            activeFileId={activeFileId}
-            onFileClick={onFileClick}
-          />
-        ))}
-      </div>
+      {/* 无项目时的占位提示 */}
+      {tree.length === 0 ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8">
+          <FontAwesomeIcon icon={faFolderOpen} className="text-[28px] text-[#555555]" />
+          <p className="text-center text-[12px] text-[#666666]">尚未打开文件夹</p>
+          <button
+            type="button"
+            onClick={onOpenFolder}
+            className="rounded-md border border-[#3c3c3c] px-4 py-1.5 text-[12px] text-[#cccccc] transition-colors hover:bg-[#3c3c3c] hover:text-white"
+          >
+            打开文件夹…
+          </button>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          {tree.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              activeFileId={activeFileId}
+              onFileClick={onFileClick}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

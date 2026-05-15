@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { flushSync } from 'react-dom'
+import { invoke } from '@tauri-apps/api/core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCog } from '@fortawesome/free-solid-svg-icons'
 import type { ChatMessage, LlmModelOption } from './api/client'
@@ -9,11 +11,12 @@ import {
 import type { AgentEvent } from './agent/types'
 import { ActivityBar } from './components/ActivityBar'
 import { AiChatSidebar } from './components/AiChatSidebar'
-import { EditorArea, fileNodeToTab } from './components/EditorArea'
+import { EditorArea } from './components/EditorArea'
 import type { EditorTab } from './components/EditorArea'
 import { FileExplorer } from './components/FileExplorer'
 import type { FileNode } from './components/FileExplorer'
 import { StatusBar } from './components/StatusBar'
+import { TerminalPanel } from './components/TerminalPanel'
 import { ToastContainer, useToast } from './components/Toast'
 import { SettingsPanel, DEFAULT_EDITOR_OPTIONS } from './components/SettingsPanel'
 import type { EditorOptions } from './components/SettingsPanel'
@@ -33,6 +36,11 @@ export default function App() {
   const [tabs, setTabs] = useState<EditorTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [activeFileId, setActiveFileId] = useState<string | null>(null)
+  const [fileTree, setFileTree] = useState<FileNode[]>([])
+  const [folderPath, setFolderPath] = useState<string | null>(null)
+  const [showSidebar, setShowSidebar] = useState(true)
+  const [showTerminal, setShowTerminal] = useState(false)
+  const [terminalHeight, setTerminalHeight] = useState(220)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [editorOptions, setEditorOptions] = useState<EditorOptions>(DEFAULT_EDITOR_OPTIONS)
 
@@ -164,15 +172,40 @@ export default function App() {
     if (apiKey.trim()) void loadLlmModels(apiKey)
   }, [apiKey, loadLlmModels])
 
+  // ── Folder / file open ────────────────────────────────────────
+  const handleOpenFolder = useCallback(async () => {
+    try {
+      const picked = await invoke<string | null>('open_folder_dialog')
+      if (!picked) return
+      const tree = await invoke<FileNode[]>('read_dir_tree', { path: picked })
+      setFolderPath(picked)
+      setFileTree(tree)
+      // 关闭所有已打开的 tab
+      setTabs([])
+      setActiveTabId(null)
+      setActiveFileId(null)
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : '打开文件夹失败', 'error')
+    }
+  }, [pushToast])
+
   // ── Editor handlers ───────────────────────────────────────────
-  const handleFileClick = useCallback((node: FileNode) => {
+  const handleFileClick = useCallback(async (node: FileNode) => {
     setActiveFileId(node.id)
-    setTabs((prev) => {
-      if (prev.some((t) => t.id === node.id)) return prev
-      return [...prev, fileNodeToTab(node)]
-    })
-    setActiveTabId(node.id)
-  }, [])
+    if (tabs.some((t) => t.id === node.id)) {
+      setActiveTabId(node.id)
+      return
+    }
+    try {
+      const content = await invoke<string>('read_file_content', { path: node.id })
+      const tab: EditorTab = { id: node.id, name: node.name, ext: node.ext, content }
+      setTabs((prev) => [...prev, tab])
+      setActiveTabId(node.id)
+    } catch {
+      // 二进制或超大文件：只激活，不打开 tab
+      pushToast(`无法打开 ${node.name}（二进制或文件过大）`, 'error')
+    }
+  }, [tabs, pushToast])
 
   const handleTabClose = useCallback((id: string) => {
     setTabs((prev) => {
@@ -274,17 +307,20 @@ export default function App() {
             },
             onWriteFile: handleWriteFile,
             onToken: (token) => {
-              setMessages((m) => {
-                const next = [...m]
-                const last = next[next.length - 1]
-                if (last?.role === 'assistant') {
-                  next[next.length - 1] = {
-                    ...last,
-                    content: last.content + token,
-                    agentSteps: [...agentSteps],
+              // flushSync 强制 React 18 跳过自动批量更新，每个 token 立即触发一次渲染
+              flushSync(() => {
+                setMessages((m) => {
+                  const next = [...m]
+                  const last = next[next.length - 1]
+                  if (last?.role === 'assistant') {
+                    next[next.length - 1] = {
+                      ...last,
+                      content: last.content + token,
+                      agentSteps: [...agentSteps],
+                    }
                   }
-                }
-                return next
+                  return next
+                })
               })
             },
             onDone: () => {
@@ -386,26 +422,32 @@ export default function App() {
   const language = activeTab?.ext ? (EXT_LANGUAGE[activeTab.ext] ?? 'Plain Text') : 'Plain Text'
 
   const showSidePanel = activeSection === 'explorer' || activeSection === 'search' || activeSection === 'git' || activeSection === 'extensions'
+  const finalShowSidePanel = showSidebar && showSidePanel
 
   // ── Resizable panels ──────────────────────────────────────────
   const [leftWidth, setLeftWidth] = useState(240)
   const [rightWidth, setRightWidth] = useState(340)
-  const dragState = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
+  const dragState = useRef<{ side: 'left' | 'right' | 'bottom'; startX: number; startY: number; startWidth: number } | null>(null)
 
-  const startDrag = useCallback((side: 'left' | 'right', e: ReactMouseEvent) => {
+  const startDrag = useCallback((side: 'left' | 'right' | 'bottom', e: ReactMouseEvent) => {
     e.preventDefault()
     dragState.current = {
       side,
       startX: e.clientX,
-      startWidth: side === 'left' ? leftWidth : rightWidth,
+      startY: e.clientY,
+      startWidth: side === 'left' ? leftWidth : side === 'right' ? rightWidth : terminalHeight,
     }
     const onMove = (ev: globalThis.MouseEvent) => {
       if (!dragState.current) return
-      const delta = ev.clientX - dragState.current.startX
       if (dragState.current.side === 'left') {
+        const delta = ev.clientX - dragState.current.startX
         setLeftWidth(Math.max(140, Math.min(480, dragState.current.startWidth + delta)))
-      } else {
+      } else if (dragState.current.side === 'right') {
+        const delta = ev.clientX - dragState.current.startX
         setRightWidth(Math.max(220, Math.min(600, dragState.current.startWidth - delta)))
+      } else {
+        const delta = ev.clientY - dragState.current.startY
+        setTerminalHeight(Math.max(80, Math.min(600, dragState.current.startWidth - delta)))
       }
     }
     const onUp = () => {
@@ -415,7 +457,7 @@ export default function App() {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [leftWidth, rightWidth])
+  }, [leftWidth, rightWidth, terminalHeight])
 
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-[#1e1e1e] text-[#cccccc]">
@@ -428,9 +470,48 @@ export default function App() {
           {activeTab ? `${activeTab.name} — Isshin AI Code Editor` : 'Isshin AI Code Editor'}
         </span>
         <div
-          className="absolute right-2 flex items-center"
+          className="absolute right-2 flex items-center gap-0.5"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
+          {/* 切换左侧目录 */}
+          <button
+            type="button"
+            title={showSidebar ? '隐藏资源管理器' : '显示资源管理器'}
+            onClick={() => setShowSidebar((v) => !v)}
+            className={[
+              'flex h-6 w-6 items-center justify-center rounded transition-colors',
+              showSidebar
+                ? 'text-[#cccccc] hover:bg-[#3c3c3c]'
+                : 'text-[#858585] hover:bg-[#3c3c3c] hover:text-[#cccccc]',
+            ].join(' ')}
+          >
+            <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor">
+              <rect x="0.6" y="0.6" width="12.8" height="10.8" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.1"/>
+              <rect x="0.6" y="0.6" width="4.2" height="10.8" rx="1.2"/>
+              <line x1="4.8" y1="0.6" x2="4.8" y2="11.4" stroke="currentColor" strokeWidth="0.7" opacity="0.5"/>
+            </svg>
+          </button>
+
+          {/* 切换底部终端 */}
+          <button
+            type="button"
+            title={showTerminal ? '隐藏终端' : '显示终端'}
+            onClick={() => setShowTerminal((v) => !v)}
+            className={[
+              'flex h-6 w-6 items-center justify-center rounded transition-colors',
+              showTerminal
+                ? 'text-[#cccccc] hover:bg-[#3c3c3c]'
+                : 'text-[#858585] hover:bg-[#3c3c3c] hover:text-[#cccccc]',
+            ].join(' ')}
+          >
+            <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor">
+              <rect x="0.6" y="0.6" width="12.8" height="10.8" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.1"/>
+              <rect x="0.6" y="6.8" width="12.8" height="4.6" rx="1.2"/>
+              <line x1="0.6" y1="6.8" x2="13.4" y2="6.8" stroke="currentColor" strokeWidth="0.7" opacity="0.5"/>
+            </svg>
+          </button>
+
+          {/* 设置 */}
           <button
             type="button"
             title="设置"
@@ -457,12 +538,15 @@ export default function App() {
         />
 
         {/* Side panel */}
-        {showSidePanel && (
+        {finalShowSidePanel && (
           <>
             <div className="shrink-0 overflow-hidden" style={{ width: leftWidth }}>
               <FileExplorer
+                tree={fileTree}
+                folderName={folderPath ? folderPath.split('/').pop() ?? folderPath : null}
                 activeFileId={activeFileId}
                 onFileClick={handleFileClick}
+                onOpenFolder={handleOpenFolder}
               />
             </div>
             {/* Left resize handle */}
@@ -475,18 +559,35 @@ export default function App() {
           </>
         )}
 
-        {/* Editor area */}
-        <EditorArea
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onTabClick={(id) => {
-            setActiveTabId(id)
-            setActiveFileId(id)
-          }}
-          onTabClose={handleTabClose}
-          onContentChange={handleContentChange}
-          editorOptions={editorOptions}
-        />
+        {/* Editor area + Terminal（竖向堆叠，宽度与编辑区一致）*/}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <EditorArea
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onTabClick={(id) => {
+              setActiveTabId(id)
+              setActiveFileId(id)
+            }}
+            onTabClose={handleTabClose}
+            onContentChange={handleContentChange}
+            editorOptions={editorOptions}
+          />
+
+          {showTerminal && (
+            <>
+              {/* 上下拖拽分割线 */}
+              <div
+                className="group relative z-10 h-[4px] shrink-0 cursor-row-resize bg-transparent hover:bg-[#0078d4]/40 active:bg-[#0078d4]/60 transition-colors"
+                onMouseDown={(e) => startDrag('bottom', e)}
+              >
+                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-[#3c3c3c] group-hover:bg-[#0078d4]/60 transition-colors" />
+              </div>
+              <div className="shrink-0 overflow-hidden" style={{ height: terminalHeight }}>
+                <TerminalPanel onClose={() => setShowTerminal(false)} cwd={folderPath ?? undefined} />
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Right resize handle */}
         <div

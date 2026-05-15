@@ -34,13 +34,14 @@ def build_graph(
     api_key: str,
     store: FileStore,
     active_file: str | None = None,
+    on_token=None,
 ):
     """
     构建并编译 LangGraph StateGraph。
-    对应 my_codegen_agent/main.py 中 workflow.compile()。
+    on_token: 可选回调，用于将 LLM 文本 token 实时推送到 SSE 层。
     """
     generate_node, execute_node = make_nodes(
-        model_name, base_url, api_key, store, active_file
+        model_name, base_url, api_key, store, active_file, on_token=on_token
     )
 
     # ── 路由函数（对应 decide_next_step）──────────────────────────────

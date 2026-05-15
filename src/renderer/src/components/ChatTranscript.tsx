@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatMessage, AgentStep } from '../api/client'
 import { ChatGPTAvatar } from './ChatGPTAvatar'
 import { CopyIcon } from './CopyIcon'
@@ -152,12 +152,19 @@ export function ChatTranscript({
   }, [editingUserIndex, editDraft, onUserEditSubmit])
 
   const transcriptScrollRef = useRef<HTMLDivElement>(null)
+  const rafRef = useRef<number | null>(null)
 
-  useLayoutEffect(() => {
+  // 自动滚到底部：用 requestAnimationFrame 节流，避免每个 token 都触发同步 reflow，
+  // 保证流式输出时 React 能正常调度渲染，不会因 DOM 操作而阻塞。
+  useEffect(() => {
     if (messages.length === 0) return
-    const el = transcriptScrollRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
+    if (rafRef.current !== null) return   // 本帧已有待执行的滚动，跳过
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      const el = transcriptScrollRef.current
+      if (!el) return
+      el.scrollTop = el.scrollHeight
+    })
   }, [messages, streaming])
 
   return (
