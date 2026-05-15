@@ -34,8 +34,10 @@ type Props = {
   onClose: () => void
   baseUrl: string
   apiKey: string
+  modelPath: string
   onBaseUrlChange: (v: string) => void
   onApiKeyChange: (v: string) => void
+  onModelPathChange: (v: string) => void
   editorOptions: EditorOptions
   onEditorOptionsChange: (opts: EditorOptions) => void
   llmModels: LlmModelOption[]
@@ -89,28 +91,47 @@ function Toggle({
   onChange,
   label = '',
   green = false,
+  compact = false,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   label?: string
   green?: boolean
+  /** 模型列表等密集场景用更小轨道 */
+  compact?: boolean
 }) {
+  const track = compact
+    ? 'h-[14px] w-[26px]'
+    : 'h-[22px] w-10'
+  const thumb = compact
+    ? 'top-[2px] h-[10px] w-[10px]'
+    : 'top-[3px] h-4 w-4'
+  const thumbX = compact
+    ? (checked ? 'translate-x-[14px]' : 'translate-x-[2px]')
+    : (checked ? 'translate-x-[22px]' : 'translate-x-[3px]')
+
   return (
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="flex items-center gap-2.5 text-left"
+      className={[
+        'flex items-center text-left',
+        label ? 'gap-2.5' : 'gap-0',
+        compact ? 'shrink-0' : '',
+      ].join(' ')}
     >
       <div
         className={[
-          'relative h-[22px] w-10 shrink-0 rounded-full transition-colors',
+          'relative shrink-0 rounded-full transition-colors',
+          track,
           checked ? (green ? 'bg-[#22c55e]' : 'bg-[#0078d4]') : 'bg-[#5a5a5a]',
         ].join(' ')}
       >
         <span
           className={[
-            'absolute top-[3px] h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-            checked ? 'translate-x-[22px]' : 'translate-x-[3px]',
+            'absolute rounded-full bg-white shadow-sm transition-transform',
+            thumb,
+            thumbX,
           ].join(' ')}
         />
       </div>
@@ -176,8 +197,10 @@ export function SettingsPanel({
   onClose,
   baseUrl,
   apiKey,
+  modelPath,
   onBaseUrlChange,
   onApiKeyChange,
+  onModelPathChange,
   editorOptions,
   onEditorOptionsChange,
   llmModels,
@@ -190,6 +213,7 @@ export function SettingsPanel({
   // Draft state — only committed on "应用"
   const [draftBaseUrl, setDraftBaseUrl] = useState(baseUrl)
   const [draftApiKey, setDraftApiKey] = useState(apiKey)
+  const [draftModelPath, setDraftModelPath] = useState(modelPath)
   const [draftEditor, setDraftEditor] = useState<EditorOptions>(editorOptions)
   const [applied, setApplied] = useState(false)
   const [modelSearch, setModelSearch] = useState('')
@@ -199,13 +223,15 @@ export function SettingsPanel({
     if (open) {
       setDraftBaseUrl(baseUrl)
       setDraftApiKey(apiKey)
+      setDraftModelPath(modelPath)
       setDraftEditor(editorOptions)
       setApplied(false)
     }
   }, [open]) // intentionally omit prop dependencies — only reset on open
 
   // Dirty check
-  const llmDirty = draftBaseUrl !== baseUrl || draftApiKey !== apiKey
+  const llmDirty =
+    draftBaseUrl !== baseUrl || draftApiKey !== apiKey || draftModelPath !== modelPath
   const editorDirty = JSON.stringify(draftEditor) !== JSON.stringify(editorOptions)
   const isDirty = llmDirty || editorDirty
 
@@ -223,6 +249,7 @@ export function SettingsPanel({
     if (llmDirty) {
       onBaseUrlChange(draftBaseUrl)
       onApiKeyChange(draftApiKey)
+      onModelPathChange(draftModelPath)
     }
     if (editorDirty) {
       onEditorOptionsChange(draftEditor)
@@ -235,7 +262,11 @@ export function SettingsPanel({
     setDraftEditor((prev) => ({ ...prev, [key]: val }))
   }
 
-  const tabDirty: Record<SectionId, boolean> = { llm: llmDirty, editor: editorDirty, models: false }
+  const tabDirty: Record<SectionId, boolean> = {
+    llm: llmDirty,
+    editor: editorDirty,
+    models: false,
+  }
 
   return (
     <div
@@ -249,10 +280,10 @@ export function SettingsPanel({
           <div className="px-4 pb-2 text-[10px] font-semibold uppercase tracking-widest text-[#5a5a5a]">
             设置
           </div>
-          {(
+            {(
             [
-              { id: 'llm' as SectionId, label: 'LLM 连接', icon: faServer },
               { id: 'editor' as SectionId, label: '编辑器', icon: faCode },
+              { id: 'llm' as SectionId, label: 'LLM 连接', icon: faServer },
               { id: 'models' as SectionId, label: '模型', icon: faRobot },
             ] as const
           ).map((s) => (
@@ -323,17 +354,28 @@ export function SettingsPanel({
                   </Hint>
                 </Row>
 
+                <Row>
+                  <FieldLabel>模型标识（model）</FieldLabel>
+                  <TextInput
+                    value={draftModelPath}
+                    onChange={setDraftModelPath}
+                    placeholder="例如 minimax-m2.7（与上游 OpenAI 兼容接口一致）"
+                  />
+                  <Hint>
+                    与 Nexus 模型列表中的标识一致；可在侧边栏下拉或「模型」页勾选列表；也可手动填写未出现在列表中的 model。
+                  </Hint>
+                </Row>
+
               </>
             )}
 
             {activeTab === 'models' && (() => {
               const filtered = llmModels.filter((m) =>
                 m.label.toLowerCase().includes(modelSearch.toLowerCase()) ||
-                m.path.toLowerCase().includes(modelSearch.toLowerCase())
+                m.path.toLowerCase().includes(modelSearch.toLowerCase()),
               )
               return (
                 <>
-                  {/* Search + refresh bar */}
                   <div className="flex items-center gap-2 border-b border-[#2a2a2a] py-3">
                     <div className="relative flex-1">
                       <FontAwesomeIcon
@@ -343,7 +385,7 @@ export function SettingsPanel({
                       <input
                         value={modelSearch}
                         onChange={(e) => setModelSearch(e.target.value)}
-                        placeholder="添加或搜索模型"
+                        placeholder="搜索模型"
                         className="w-full rounded border border-[#3c3c3c] bg-[#2d2d2d] py-1.5 pl-7 pr-2.5 text-[13px] text-[#cccccc] placeholder-[#5a5a5a] outline-none transition-colors focus:border-[#555555]"
                       />
                     </div>
@@ -357,12 +399,11 @@ export function SettingsPanel({
                     </button>
                   </div>
 
-                  {/* Model list */}
                   <div className="py-1">
                     {filtered.length === 0 && (
                       <p className="py-8 text-center text-[12px] text-[#5a5a5a]">
                         {llmModels.length === 0
-                          ? '请先配置 API Key 并应用'
+                          ? '请先配置 API Key 并应用后拉取列表（https://aiplatform.njsrd.com/nexus/…）'
                           : '未找到匹配的模型'}
                       </p>
                     )}
@@ -371,13 +412,14 @@ export function SettingsPanel({
                       return (
                         <div
                           key={model.path}
-                          className="flex items-center gap-3 border-b border-[#2a2a2a] py-2.5 last:border-0"
+                          className="flex min-h-0 items-center gap-2 border-b border-[#2a2a2a] py-2 last:border-0"
                         >
-                          <span className="flex-1 truncate text-[13px] text-[#cccccc]">
+                          <span className="min-w-0 flex-1 truncate text-[13px] leading-snug text-[#cccccc]">
                             {model.label}
                           </span>
                           <Toggle
                             checked={enabled}
+                            compact
                             green
                             onChange={(v) => {
                               const next = v
@@ -496,7 +538,7 @@ export function SettingsPanel({
             )}
           </div>
 
-          {/* Footer: Apply / Cancel — hidden for models tab (changes are immediate) */}
+          {/* Footer: Apply / Cancel — 模型页为即时操作 */}
           {activeTab !== 'models' && (
           <div className="flex shrink-0 items-center justify-between border-t border-[#3c3c3c] px-5 py-3">
             <span className="text-[11px] text-[#5a5a5a]">
@@ -513,6 +555,7 @@ export function SettingsPanel({
                   onClick={() => {
                     setDraftBaseUrl(baseUrl)
                     setDraftApiKey(apiKey)
+                    setDraftModelPath(modelPath)
                     setDraftEditor(editorOptions)
                   }}
                   className="rounded px-3 py-1.5 text-[12px] text-[#858585] transition-colors hover:bg-[#3c3c3c] hover:text-[#cccccc]"

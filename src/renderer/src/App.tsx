@@ -73,6 +73,7 @@ export default function App() {
       localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY)
       setBaseUrl(localStorage.getItem(BASE_URL_STORAGE_KEY) ?? '')
       setApiKey(localStorage.getItem(API_KEY_STORAGE_KEY) ?? '')
+      setSelectedModelPath(localStorage.getItem(MODEL_PATH_STORAGE_KEY) ?? '')
       const editorStored = localStorage.getItem(EDITOR_OPTIONS_STORAGE_KEY)
       if (editorStored) {
         try {
@@ -88,16 +89,20 @@ export default function App() {
     } catch { /* ignore */ }
   }, [])
 
-  // ── Model loading ─────────────────────────────────────────────
+  // ── 模型列表（Nexus API，依赖 api_key）───────────────────────────
   const applyModelListResult = useCallback(
-    (mRes: PromiseSettledResult<LlmModelOption[]>) => {
+    (mRes: PromiseSettledResult<Awaited<ReturnType<typeof fetchLlmModels>>>) => {
       if (mRes.status === 'fulfilled') {
-        const models = mRes.value
+        const raw = mRes.value
+        const models: LlmModelOption[] = raw.map((r) => ({
+          path: r.path,
+          label: r.label,
+          active: r.active,
+        }))
         setLlmModels(models)
         setSelectedModelPath((prev) => {
           if (models.length === 0) {
-            try { localStorage.removeItem(MODEL_PATH_STORAGE_KEY) } catch { /* ignore */ }
-            return ''
+            return prev
           }
           let next = ''
           if (prev && models.some((m) => m.path === prev)) {
@@ -117,8 +122,6 @@ export default function App() {
         })
       } else {
         setLlmModels([])
-        setSelectedModelPath('')
-        try { localStorage.removeItem(MODEL_PATH_STORAGE_KEY) } catch { /* ignore */ }
       }
     },
     [],
@@ -136,8 +139,6 @@ export default function App() {
     const key = apiKey.trim()
     if (!key) {
       setLlmModels([])
-      setSelectedModelPath('')
-      try { localStorage.removeItem(MODEL_PATH_STORAGE_KEY) } catch { /* ignore */ }
       return
     }
     const id = window.setTimeout(() => {
@@ -160,6 +161,15 @@ export default function App() {
   const handleEditorOptionsChange = useCallback((opts: EditorOptions) => {
     setEditorOptions(opts)
     try { localStorage.setItem(EDITOR_OPTIONS_STORAGE_KEY, JSON.stringify(opts)) } catch { /* ignore */ }
+  }, [])
+
+  const handleModelPathChange = useCallback((v: string) => {
+    setSelectedModelPath(v)
+    try {
+      const t = v.trim()
+      if (t) localStorage.setItem(MODEL_PATH_STORAGE_KEY, t)
+      else localStorage.removeItem(MODEL_PATH_STORAGE_KEY)
+    } catch { /* ignore */ }
   }, [])
 
   const handleEnabledModelsChange = useCallback((enabledPaths: string[]) => {
@@ -273,7 +283,7 @@ export default function App() {
 
       try {
         if (!baseUrl.trim()) throw new Error('请填写 baseUrl')
-        if (!selectedModelPath.trim()) throw new Error('请选择模型')
+        if (!selectedModelPath.trim()) throw new Error('请选择或填写模型标识（model）')
         if (!apiKey.trim()) throw new Error('请填写 api_key')
 
         await streamAgentFromPython(
@@ -605,7 +615,7 @@ export default function App() {
           input={input}
           llmModels={llmModels.filter((m) => !disabledModelPaths.includes(m.path))}
           selectedModelPath={selectedModelPath}
-          onModelChange={setSelectedModelPath}
+          onModelChange={handleModelPathChange}
           onInputChange={setInput}
           onSubmit={send}
           onStop={stopStream}
@@ -632,8 +642,10 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         baseUrl={baseUrl}
         apiKey={apiKey}
+        modelPath={selectedModelPath}
         onBaseUrlChange={handleBaseUrlChange}
         onApiKeyChange={handleApiKeyChange}
+        onModelPathChange={handleModelPathChange}
         editorOptions={editorOptions}
         onEditorOptionsChange={handleEditorOptionsChange}
         llmModels={llmModels}

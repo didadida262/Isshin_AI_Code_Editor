@@ -18,11 +18,11 @@ impl Config {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(8787),
             public_api_target: env::var("PUBLIC_API_TARGET")
-                .unwrap_or_else(|_| "http://58.222.41.68".to_string())
+                .unwrap_or_else(|_| "https://aiplatform.njsrd.com".to_string())
                 .trim_end_matches('/')
                 .to_string(),
             site_origin: env::var("PUBLIC_ENTERPRISE_SITE_ORIGIN")
-                .unwrap_or_else(|_| "http://58.222.41.68".to_string())
+                .unwrap_or_else(|_| "https://aiplatform.njsrd.com".to_string())
                 .trim_end_matches('/')
                 .to_string(),
             public_enterprise_cookie: env::var("PUBLIC_ENTERPRISE_COOKIE")

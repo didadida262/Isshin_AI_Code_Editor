@@ -46,6 +46,10 @@ function getLocalMiddlewareOrigin(): string {
   return 'http://127.0.0.1:8787'
 }
 
+/** Nexus 模型列表（公网 HTTPS，随 api_key 拉取） */
+export const MODEL_SERVICES_LIST_URL =
+  'https://aiplatform.njsrd.com/nexus/api/model-services?pageNum=1&pageSize=999'
+
 function pickStr(obj: Record<string, unknown>, keys: string[]): string {
   for (const k of keys) {
     const v = obj[k]
@@ -114,19 +118,7 @@ function rowToModelOption(row: unknown): EnterpriseModelOption | null {
   return { path, label, active: false }
 }
 
-/**
- * 与平台 Web 一致：JWT 走 Authorization Bearer，密钥走 X-Api-Key。
- */
-export function authorizationBearer(token: string): string {
-  const t = token.trim()
-  if (!t) return ''
-  return /^Bearer\s+/i.test(t) ? t : `Bearer ${t}`
-}
-
-function buildEnterpriseAuthHeaders(
-  token: string,
-  apiKey: string,
-): Headers {
+function buildEnterpriseAuthHeaders(token: string, apiKey: string): Headers {
   const h = new Headers()
   h.set('Accept', 'application/json, text/plain, */*')
   const auth = authorizationBearer(token)
@@ -138,13 +130,7 @@ function buildEnterpriseAuthHeaders(
   return h
 }
 
-/** 模型下拉列表固定拉取此地址 */
-export const MODEL_SERVICES_LIST_URL =
-  'http://58.222.41.68/enterprise/api/model-services?pageNum=1&pageSize=10'
-
-export async function fetchLlmModels(
-  apiKey: string,
-): Promise<EnterpriseModelOption[]> {
+export async function fetchLlmModels(apiKey: string): Promise<EnterpriseModelOption[]> {
   if (!apiKey.trim()) return []
   const res = await fetch(MODEL_SERVICES_LIST_URL, {
     method: 'GET',
@@ -171,6 +157,15 @@ export async function fetchLlmModels(
     }
   }
   return out
+}
+
+/**
+ * 与平台 Web 一致：JWT 走 Authorization Bearer，密钥走 X-Api-Key。
+ */
+export function authorizationBearer(token: string): string {
+  const t = token.trim()
+  if (!t) return ''
+  return /^Bearer\s+/i.test(t) ? t : `Bearer ${t}`
 }
 
 export type EnterpriseChatMessage = {
