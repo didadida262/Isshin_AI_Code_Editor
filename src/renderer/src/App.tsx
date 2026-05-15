@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCog } from '@fortawesome/free-solid-svg-icons'
-import type { ChatMessage, LlmModelOption } from './api/client'
+import type { ChatAttachment, ChatMessage, LlmModelOption } from './api/client'
 import {
   fetchLlmModels,
   streamAgentFromPython,
@@ -12,7 +12,7 @@ import type { AgentEvent } from './agent/types'
 import { ActivityBar } from './components/ActivityBar'
 import { AiChatSidebar } from './components/AiChatSidebar'
 import { EditorArea } from './components/EditorArea'
-import type { EditorTab } from './components/EditorArea'
+import type { EditorSelectionPayload, EditorTab } from './components/EditorArea'
 import { FileExplorer } from './components/FileExplorer'
 import { SearchPanel } from './components/SearchPanel'
 import type { FileNode } from './components/FileExplorer'
@@ -58,6 +58,7 @@ export default function App() {
   const [disabledModelPaths, setDisabledModelPaths] = useState<string[]>([])
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([])
   const streamAbortRef = useRef<AbortController | null>(null)
 
   // ── Warnings → Toast ─────────────────────────────────────────
@@ -242,6 +243,33 @@ export default function App() {
     streamAbortRef.current?.abort()
   }, [])
 
+  // ── Editor → Chat：把选中代码加入下一条对话 ───────────────────────────
+  const handleAddSelectionToChat = useCallback(
+    (payload: EditorSelectionPayload) => {
+      const att: ChatAttachment = {
+        id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        filePath: payload.filePath,
+        fileName: payload.fileName,
+        language: payload.language,
+        startLine: payload.startLine,
+        endLine: payload.endLine,
+        code: payload.code,
+      }
+      setPendingAttachments((prev) => [...prev, att])
+      setActiveSection('chat')
+      setShowSidebar(true)
+      pushToast(
+        `已加入对话：${payload.fileName} L${payload.startLine}-${payload.endLine}`,
+        'info',
+      )
+    },
+    [pushToast],
+  )
+
+  const handleRemovePendingAttachment = useCallback((id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
+  }, [])
+
   // ── write_file 事件处理：Python agent 写入文件时同步到编辑器 ────────
   const handleWriteFile = useCallback((path: string, content: string) => {
     setTabs((prev) => {
@@ -262,9 +290,25 @@ export default function App() {
     setActiveTabId(path)
   }, [])
 
+  // 拼出发给 LLM 的 user_message：先附加代码片段，再跟用户文本。
+  // 用户气泡中只显示原始 text + 上方 chips，模型则能看到完整代码上下文。
+  const buildUserMessageForLlm = useCallback(
+    (text: string, atts: ChatAttachment[]): string => {
+      if (atts.length === 0) return text
+      const blocks = atts.map((a, i) => {
+        const header = `[附加代码 ${i + 1}] ${a.filePath} (L${a.startLine}-L${a.endLine})`
+        const fence = a.language?.trim() || ''
+        return `${header}\n\`\`\`${fence}\n${a.code}\n\`\`\``
+      })
+      const ctx = blocks.join('\n\n')
+      return text.trim() ? `${ctx}\n\n${text}` : ctx
+    },
+    [],
+  )
+
   // ── Agent runner（调用 Python FastAPI 后端）────────────────────────
   const runAgentStream = useCallback(
-    async (text: string, history: ChatMessage[]) => {
+    async (text: string, history: ChatMessage[], attachments: ChatAttachment[] = []) => {
       setStreaming(true)
       setWarnings([])
       const ac = new AbortController()
@@ -277,10 +321,16 @@ export default function App() {
       tabs.forEach((t) => { filesSnapshot[t.id] = t.content })
       const activeFilePath = tabs.find((t) => t.id === activeTabId)?.id ?? null
 
+      // 历史中的 user 消息也要把当时附带的代码片段展开给模型
       const llmHistory = history.map((m) => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content:
+          m.role === 'user'
+            ? buildUserMessageForLlm(m.content, m.attachments ?? [])
+            : m.content,
       }))
+
+      const llmUserMessage = buildUserMessageForLlm(text, attachments)
 
       try {
         if (!baseUrl.trim()) throw new Error('请填写 baseUrl')
@@ -289,7 +339,7 @@ export default function App() {
 
         await streamAgentFromPython(
           {
-            userMessage: text,
+            userMessage: llmUserMessage,
             history: llmHistory,
             files: filesSnapshot,
             activeFile: activeFilePath,
@@ -381,17 +431,23 @@ export default function App() {
         setStreaming(false)
       }
     },
-    [baseUrl, apiKey, selectedModelPath, tabs, activeTabId, handleWriteFile],
+    [baseUrl, apiKey, selectedModelPath, tabs, activeTabId, handleWriteFile, buildUserMessageForLlm],
   )
 
   const send = useCallback(async () => {
     const text = input.trim()
-    if (!text || streaming) return
+    const atts = pendingAttachments
+    if ((!text && atts.length === 0) || streaming) return
     setInput('')
+    setPendingAttachments([])
     const history = [...messages]
-    setMessages((m) => [...m, { role: 'user', content: text }, { role: 'assistant', content: '' }])
-    await runAgentStream(text, history)
-  }, [input, streaming, messages, runAgentStream])  // eslint-disable-line react-hooks/exhaustive-deps
+    setMessages((m) => [
+      ...m,
+      { role: 'user', content: text, attachments: atts.length > 0 ? atts : undefined },
+      { role: 'assistant', content: '' },
+    ])
+    await runAgentStream(text, history, atts)
+  }, [input, streaming, messages, pendingAttachments, runAgentStream])
 
   const regenerateAt = useCallback(
     async (assistantIndex: number) => {
@@ -402,8 +458,9 @@ export default function App() {
       if (!userPair || userPair.role !== 'user') return
       const history = m.slice(0, assistantIndex - 1)
       const text = userPair.content
+      const atts = userPair.attachments ?? []
       setMessages([...m.slice(0, assistantIndex), { role: 'assistant', content: '' }])
-      await runAgentStream(text, history)
+      await runAgentStream(text, history, atts)
     },
     [streaming, messages, runAgentStream],
   )
@@ -413,12 +470,14 @@ export default function App() {
       const text = newText.trim()
       if (!text || streaming) return
       const history = messages.slice(0, userIndex)
+      const original = messages[userIndex]
+      const atts = original?.role === 'user' ? original.attachments ?? [] : []
       setMessages([
         ...messages.slice(0, userIndex),
-        { role: 'user', content: text },
+        { role: 'user', content: text, attachments: atts.length > 0 ? atts : undefined },
         { role: 'assistant', content: '' },
       ])
-      await runAgentStream(text, history)
+      await runAgentStream(text, history, atts)
     },
     [streaming, messages, runAgentStream],
   )
@@ -593,6 +652,7 @@ export default function App() {
             }}
             onTabClose={handleTabClose}
             onContentChange={handleContentChange}
+            onAddSelectionToChat={handleAddSelectionToChat}
             editorOptions={editorOptions}
           />
 
@@ -634,6 +694,8 @@ export default function App() {
           onStop={stopStream}
           onRegenerate={regenerateAt}
           onUserEditSubmit={submitUserEdit}
+          pendingAttachments={pendingAttachments}
+          onRemovePendingAttachment={handleRemovePendingAttachment}
           width={rightWidth}
         />
       </div>

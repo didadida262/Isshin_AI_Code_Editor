@@ -1,6 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ChatMessage, AgentStep } from '../api/client'
+import { faCode } from '@fortawesome/free-solid-svg-icons'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import type { ChatMessage, AgentStep, ChatAttachment } from '../api/client'
 import { ChatGPTAvatar } from './ChatGPTAvatar'
 import { CopyIcon } from './CopyIcon'
 import { MarkdownContent } from './MarkdownContent'
@@ -116,6 +118,25 @@ async function copyToClipboard(text: string): Promise<boolean> {
       return false
     }
   }
+}
+
+function UserAttachmentChip({ attachment }: { attachment: ChatAttachment }) {
+  const range =
+    attachment.startLine === attachment.endLine
+      ? `L${attachment.startLine}`
+      : `L${attachment.startLine}-${attachment.endLine}`
+  return (
+    <div
+      className="flex max-w-full items-center gap-1.5 rounded-md border border-[#3c3c3c] bg-[#1e1e1e] px-1.5 py-0.5 text-[11px] text-[#cccccc]"
+      title={`${attachment.filePath} (${range})`}
+    >
+      <FontAwesomeIcon icon={faCode} className="shrink-0 text-[9px] text-[#7a9fc4]" />
+      <span className="max-w-[160px] truncate">{attachment.fileName}</span>
+      <span className="shrink-0 rounded bg-[#2d2d2d] px-1 text-[9px] text-[#858585]">
+        {range}
+      </span>
+    </div>
+  )
 }
 
 export function ChatTranscript({
@@ -281,6 +302,14 @@ export function ChatTranscript({
                     </div>
                   ) : (
                     <div className="flex min-w-0 max-w-[85%] flex-col gap-1 items-end">
+                      {(m.attachments?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {m.attachments!.map((a) => (
+                            <UserAttachmentChip key={a.id} attachment={a} />
+                          ))}
+                        </div>
+                      )}
+                      {(m.content || editingUserIndex === i) && (
                       <div className="rounded-xl border border-[#3c3c3c] bg-[#2d2d2d] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#cccccc]">
                         {editingUserIndex === i ? (
                           <div className="flex flex-col gap-2">
@@ -312,8 +341,9 @@ export function ChatTranscript({
                           <MarkdownContent content={m.content} compact />
                         )}
                       </div>
+                      )}
 
-                      {!(editingUserIndex === i) ? (
+                      {!(editingUserIndex === i) && m.content ? (
                         <div className="flex items-center gap-0.5 px-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                           <button
                             type="button"

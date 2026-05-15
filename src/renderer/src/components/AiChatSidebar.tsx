@@ -6,7 +6,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useState } from 'react'
-import type { ChatMessage, LlmModelOption } from '../api/client'
+import type { ChatAttachment, ChatMessage, LlmModelOption } from '../api/client'
 import { ChatTranscript } from './ChatTranscript'
 import { InputBar } from './InputBar'
 
@@ -23,6 +23,8 @@ type Props = {
   onStop: () => void
   onRegenerate: (index: number) => void
   onUserEditSubmit: (index: number, text: string) => void
+  pendingAttachments?: ChatAttachment[]
+  onRemovePendingAttachment?: (id: string) => void
   width?: number
 }
 
@@ -41,6 +43,8 @@ export function AiChatSidebar({
   onStop,
   onRegenerate,
   onUserEditSubmit,
+  pendingAttachments,
+  onRemovePendingAttachment,
   width = 340,
 }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([{ id: 'default', label: 'New Agent' }])
@@ -146,6 +150,8 @@ export function AiChatSidebar({
         models={llmModels}
         selectedModelPath={selectedModelPath}
         onModelChange={onModelChange}
+        attachments={pendingAttachments}
+        onRemoveAttachment={onRemovePendingAttachment}
       />
     </aside>
   )

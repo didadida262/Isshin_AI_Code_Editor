@@ -3,10 +3,12 @@ import {
   faSquare,
   faChevronDown,
   faCheck,
+  faCode,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LlmModelOption } from '../api/client'
+import type { ChatAttachment, LlmModelOption } from '../api/client'
 
 type Props = {
   value: string
@@ -17,6 +19,8 @@ type Props = {
   models?: LlmModelOption[]
   selectedModelPath?: string
   onModelChange?: (path: string) => void
+  attachments?: ChatAttachment[]
+  onRemoveAttachment?: (id: string) => void
 }
 
 export function InputBar({
@@ -28,6 +32,8 @@ export function InputBar({
   models,
   selectedModelPath,
   onModelChange,
+  attachments,
+  onRemoveAttachment,
 }: Props) {
   const ta = useRef<HTMLTextAreaElement>(null)
   const wasStreaming = useRef(false)
@@ -35,10 +41,12 @@ export function InputBar({
   const [modelFilter, setModelFilter] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  const hasAttachments = (attachments?.length ?? 0) > 0
   const submit = useCallback(() => {
-    if (streaming || !value.trim()) return
+    if (streaming) return
+    if (!value.trim() && !hasAttachments) return
     onSubmit()
-  }, [streaming, onSubmit, value])
+  }, [streaming, onSubmit, value, hasAttachments])
 
   useEffect(() => {
     const el = ta.current
@@ -139,6 +147,18 @@ export function InputBar({
   return (
     <div className="shrink-0 px-3 pb-3 pt-2">
       <div className="flex flex-col rounded-xl border border-[#3c3c3c] bg-[#2a2a2a] transition-[border-color] duration-150 focus-within:border-[#555555]">
+        {hasAttachments && (
+          <div className="flex flex-wrap gap-1 px-2 pt-2">
+            {attachments!.map((a) => (
+              <AttachmentChip
+                key={a.id}
+                attachment={a}
+                onRemove={onRemoveAttachment ? () => onRemoveAttachment(a.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={ta}
           rows={1}
@@ -151,7 +171,7 @@ export function InputBar({
               submit()
             }
           }}
-          placeholder="有问题，尽管问"
+          placeholder={hasAttachments ? '补充你的问题（可留空）' : '有问题，尽管问'}
           className="block max-h-[200px] min-h-[36px] w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-[13px] leading-5 text-[#cccccc] outline-none placeholder:text-[#555555] disabled:opacity-60"
         />
 
@@ -172,7 +192,7 @@ export function InputBar({
               <button
                 type="button"
                 onClick={submit}
-                disabled={!value.trim()}
+                disabled={!value.trim() && !hasAttachments}
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#cccccc] text-[#1a1a1a] transition hover:bg-[#ffffff] disabled:cursor-not-allowed disabled:bg-[#3c3c3c] disabled:text-[#6b6b6b]"
                 aria-label="发送"
               >
@@ -182,6 +202,41 @@ export function InputBar({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function AttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: ChatAttachment
+  onRemove?: () => void
+}) {
+  const range =
+    attachment.startLine === attachment.endLine
+      ? `L${attachment.startLine}`
+      : `L${attachment.startLine}-${attachment.endLine}`
+  return (
+    <div
+      className="group flex max-w-full items-center gap-1.5 rounded-md border border-[#3c3c3c] bg-[#1e1e1e] px-1.5 py-0.5 text-[11px] text-[#cccccc]"
+      title={`${attachment.filePath} (${range})`}
+    >
+      <FontAwesomeIcon icon={faCode} className="shrink-0 text-[9px] text-[#7a9fc4]" />
+      <span className="max-w-[140px] truncate">{attachment.fileName}</span>
+      <span className="shrink-0 rounded bg-[#2d2d2d] px-1 text-[9px] text-[#858585]">
+        {range}
+      </span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded text-[#858585] hover:bg-[#3c3c3c] hover:text-[#cccccc]"
+          aria-label="移除附加代码"
+        >
+          <FontAwesomeIcon icon={faXmark} className="text-[8px]" />
+        </button>
+      )}
     </div>
   )
 }

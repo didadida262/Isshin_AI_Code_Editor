@@ -8,11 +8,24 @@ export type AgentStep = {
   toolName?: string
 }
 
+/** 用户从编辑器选中并附加到本轮对话的代码片段 */
+export type ChatAttachment = {
+  id: string
+  filePath: string
+  fileName: string
+  language?: string
+  startLine: number
+  endLine: number
+  code: string
+}
+
 export type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
   /** agent 模式下附带的中间步骤 */
   agentSteps?: AgentStep[]
+  /** 本条用户消息携带的代码片段（仅 role=user）*/
+  attachments?: ChatAttachment[]
 }
 
 export type LlmModelOption = {
