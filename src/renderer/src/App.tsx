@@ -270,24 +270,100 @@ export default function App() {
     setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
   }, [])
 
-  // ── write_file 事件处理：Python agent 写入文件时同步到编辑器 ────────
+  // ── write_file 事件处理：Python agent 写入文件时同步到编辑器（不落盘） ──
+  // 进入 pendingAgentEdit 状态，等用户在编辑器 banner 上接受/拒绝。
   const handleWriteFile = useCallback((path: string, content: string) => {
     setTabs((prev) => {
       const exists = prev.find((t) => t.id === path || t.name === path)
       if (exists) {
-        return prev.map((t) =>
-          t.id === path || t.name === path
-            ? { ...t, content, isDirty: true }
-            : t,
-        )
+        return prev.map((t) => {
+          if (t.id !== path && t.name !== path) return t
+          // 第一次进入 pending 时锁住基线，后续 agent 多次写入不覆盖基线
+          const baseline = t.pendingAgentEdit
+            ? t.originalContent ?? ''
+            : t.content
+          return {
+            ...t,
+            content,
+            isDirty: true,
+            originalContent: baseline,
+            pendingAgentEdit: true,
+          }
+        })
       }
       const ext = path.split('.').pop() ?? ''
       return [
         ...prev,
-        { id: path, name: path.split('/').pop() ?? path, ext, content, isDirty: true },
+        {
+          id: path,
+          name: path.split('/').pop() ?? path,
+          ext,
+          content,
+          isDirty: true,
+          originalContent: '',
+          pendingAgentEdit: true,
+        },
       ]
     })
     setActiveTabId(path)
+  }, [])
+
+  // ── 持久化当前 tab → 真正写到磁盘 ────────────────────────────────────
+  // 既覆盖普通 ⌘S 保存，也用作「接受 agent 修改」的实际落盘
+  const tabsRef = useRef<EditorTab[]>([])
+  useEffect(() => { tabsRef.current = tabs }, [tabs])
+
+  const saveTabToDisk = useCallback(
+    async (id: string) => {
+      const tab = tabsRef.current.find((t) => t.id === id)
+      if (!tab) return
+      // 仅允许绝对路径落盘（来自打开文件夹/文件树）；agent 编造的相对路径会被 Rust 端拒绝
+      try {
+        await invoke('write_file_to_disk', {
+          path: id,
+          content: tab.content,
+          createDirs: true,
+        })
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  isDirty: false,
+                  pendingAgentEdit: false,
+                  originalContent: undefined,
+                }
+              : t,
+          ),
+        )
+        pushToast(`已保存 ${tab.name}`, 'info')
+      } catch (e) {
+        pushToast(e instanceof Error ? e.message : '保存失败', 'error')
+      }
+    },
+    [pushToast],
+  )
+
+  const acceptAgentEdit = useCallback(
+    (id: string) => {
+      void saveTabToDisk(id)
+    },
+    [saveTabToDisk],
+  )
+
+  const rejectAgentEdit = useCallback((id: string) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t
+        return {
+          ...t,
+          content: t.originalContent ?? t.content,
+          isDirty: false,
+          pendingAgentEdit: false,
+          originalContent: undefined,
+        }
+      }),
+    )
   }, [])
 
   // 拼出发给 LLM 的 user_message：先附加代码片段，再跟用户文本。
@@ -653,6 +729,9 @@ export default function App() {
             onTabClose={handleTabClose}
             onContentChange={handleContentChange}
             onAddSelectionToChat={handleAddSelectionToChat}
+            onSaveTab={saveTabToDisk}
+            onAcceptAgentEdit={acceptAgentEdit}
+            onRejectAgentEdit={rejectAgentEdit}
             editorOptions={editorOptions}
           />
 

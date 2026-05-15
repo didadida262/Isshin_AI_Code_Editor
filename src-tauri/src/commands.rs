@@ -117,6 +117,36 @@ pub fn read_file_content(path: String) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|_| "Not valid UTF-8".to_string())
 }
 
+// ── 写入文件 ──────────────────────────────────────────────────────────
+
+/// 把当前 tab 内容真正落盘。
+///
+/// 仅在 path 是绝对路径时执行，避免误写到工作目录意外位置。
+/// `create_dirs = true` 时自动建上级目录；否则缺目录直接报错，便于发现路径异常。
+/// 写入大小硬上限 16MB，防止 LLM 失控产生超大文件。
+#[tauri::command]
+pub fn write_file_to_disk(path: String, content: String, create_dirs: Option<bool>) -> Result<(), String> {
+    const MAX_WRITE_BYTES: usize = 16 * 1024 * 1024;
+
+    let p = Path::new(&path);
+    if !p.is_absolute() {
+        return Err(format!("拒绝写入非绝对路径: {}", path));
+    }
+    if content.len() > MAX_WRITE_BYTES {
+        return Err(format!("文件过大（>{}MB），已拒绝写入", MAX_WRITE_BYTES / 1024 / 1024));
+    }
+
+    if create_dirs.unwrap_or(false) {
+        if let Some(parent) = p.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    std::fs::write(p, content).map_err(|e| e.to_string())
+}
+
 // ── 工作区搜索（文件名 / 文件内容）───────────────────────────────────────
 
 /// 与前端 SearchPanel 对应；`line` 为 0 表示「仅文件名」命中。
