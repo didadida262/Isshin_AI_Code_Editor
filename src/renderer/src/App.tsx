@@ -425,7 +425,7 @@ export default function App() {
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <span className="text-[12px] text-[#cccccc] opacity-70">
-          {activeTab ? `${activeTab.name} — ISShin Code` : 'ISShin Code'}
+          {activeTab ? `${activeTab.name} — Isshin AI Code Editor` : 'Isshin AI Code Editor'}
         </span>
         <div
           className="absolute right-2 flex items-center"

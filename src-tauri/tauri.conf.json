@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "ISShin Code",
+  "productName": "Isshin AI Code Editor",
   "version": "1.0.0",
-  "identifier": "com.private-rag.desktop",
+  "identifier": "com.isshin-ai-code-editor.desktop",
   "build": {
     "frontendDist": "../src/renderer/dist",
     "devUrl": "http://127.0.0.1:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ISShin Code",
+        "title": "Isshin AI Code Editor",
         "width": 1100,
         "height": 760,
         "minWidth": 800,

@@ -63,12 +63,12 @@ function getExtColor(ext?: string) {
   return EXT_COLOR[ext.toLowerCase()] ?? '#858585'
 }
 
-const WELCOME_CONTENT = `// 欢迎使用 ISShin Code Editor
+const WELCOME_CONTENT = `// 欢迎使用 Isshin AI Code Editor
 //
 // 在左侧文件管理器中点击文件即可在此处打开
 // 支持语法高亮、智能提示等功能
 //
-// Tip: 在右侧 AI 面板中可以向 ISShin Code AI 提问
+// Tip: 在右侧 AI 面板中可以向 Isshin AI Code Editor 提问
 
 `
 
@@ -195,7 +195,7 @@ function WelcomeScreen() {
     <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
       <div className="text-[64px] opacity-10 select-none">{'</>'}</div>
       <p className="text-[13px] text-[#858585]">从左侧资源管理器打开文件</p>
-      <p className="text-[11px] text-[#6b6b6b]">或使用右侧 ISShin Code AI 进行对话</p>
+      <p className="text-[11px] text-[#6b6b6b]">或使用右侧 Isshin AI Code Editor 进行对话</p>
     </div>
   )
 }

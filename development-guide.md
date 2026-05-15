@@ -1,4 +1,4 @@
-# ISShin Code — 开发与打包指南
+# Isshin AI Code Editor — 开发与打包指南
 
 ## 目录
 
@@ -169,8 +169,8 @@ npm run build:tauri
 ```
 
 产物位于 `src-tauri/target/release/bundle/`：
-- macOS：`dmg/ISShin Code_1.0.0_aarch64.dmg`
-- Windows：`nsis/ISShin Code_1.0.0_x64-setup.exe`
+- macOS：`dmg/Isshin AI Code Editor_1.0.0_aarch64.dmg`
+- Windows：`nsis/Isshin AI Code Editor_1.0.0_x64-setup.exe`
 
 ---
 

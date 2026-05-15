@@ -40,7 +40,7 @@ function buildSystemPrompt(ctx: ToolContext): string {
     ? `\n当前激活文件：${active.path}`
     : ''
 
-  return `你是 ISShin Code AI，一个专业的代码助手，直接集成在代码编辑器中。
+  return `你是 Isshin AI Code Editor，一个专业的代码助手，直接集成在代码编辑器中。
 
 你可以使用以下工具来读取和修改编辑器中的文件：
 - list_files：列出所有可用文件

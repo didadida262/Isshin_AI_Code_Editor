@@ -1,5 +1,5 @@
 """
-ISShin Code — Agent 后端服务
+Isshin AI Code Editor — Agent 后端服务
 FastAPI + LangGraph，以 Tauri sidecar 或独立进程运行于 127.0.0.1:8788。
 
 端点：
@@ -34,7 +34,7 @@ from agent.tools import FileStore
 
 # ── App ──────────────────────────────────────────────────────────────
 
-app = FastAPI(title="ISShin Code Agent", version="1.0.0")
+app = FastAPI(title="Isshin AI Code Editor", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,7 +64,7 @@ def _sse(event: str, data: dict) -> str:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "ISShin Code Agent"}
+    return {"status": "ok", "service": "Isshin AI Code Editor"}
 
 
 @app.post("/agent/stream")

@@ -22,7 +22,7 @@ const TOP_ITEMS: TopItem[] = [
   { id: 'search', icon: faMagnifyingGlass, label: '搜索' },
   { id: 'git', icon: faCodeBranch, label: '源代码管理' },
   { id: 'extensions', icon: faPuzzlePiece, label: '扩展' },
-  { id: 'chat', icon: faCommentDots, label: 'ISShin Code AI' },
+  { id: 'chat', icon: faCommentDots, label: 'Isshin AI Code Editor' },
 ]
 
 export function ActivityBar({ activeSection, onSectionChange }: Props) {

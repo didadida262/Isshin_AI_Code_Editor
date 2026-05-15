@@ -26,7 +26,7 @@ def _build_system_prompt(store: FileStore, active_file: str | None) -> str:
     files = store.list_files()
     active_hint = f"\n当前激活文件：{active_file}" if active_file else ""
 
-    return f"""你是 ISShin Code AI，一个专业的代码助手，直接集成在代码编辑器中。
+    return f"""你是 Isshin AI Code Editor，一个专业的代码助手，直接集成在代码编辑器中。
 
 你可以使用以下工具来读取和修改编辑器中的文件：
 - list_files：列出所有可用文件

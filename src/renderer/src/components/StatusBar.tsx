@@ -91,7 +91,7 @@ export function StatusBar({
         >
           LF
         </button>
-        <span className="text-[12px] opacity-50">ISShin Code</span>
+        <span className="text-[12px] opacity-50">Isshin AI Code Editor</span>
       </div>
     </footer>
   )
