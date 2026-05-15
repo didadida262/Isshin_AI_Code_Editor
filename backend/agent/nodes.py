@@ -22,10 +22,16 @@ from .schema import AgentGraphState
 from .tools import FileStore, make_tools
 
 
-def _build_system_prompt(store: FileStore, active_file: str | None) -> str:
+def _build_system_prompt(store: FileStore, active_file: str | None, model_name: str) -> str:
     """构建包含编辑器上下文的 System Prompt。"""
     files = store.list_files()
     active_hint = f"\n当前激活文件：{active_file}" if active_file else ""
+
+    identity_hint = (
+        f"\n\n【模型名称答复】本次 API 请求的 model 标识为「{model_name}」。"
+        "若用户问你是什么模型、名称或版本，应据此回答（例如你是通过该标识接入的助手）。"
+        "不要自称与上述标识不符的其它模型名称。"
+    )
 
     return f"""你是 Isshin AI Code Editor，一个专业的代码助手，直接集成在代码编辑器中。
 
@@ -41,7 +47,7 @@ def _build_system_prompt(store: FileStore, active_file: str | None) -> str:
 4. 优先进行最小化、精准的修改
 5. 完成后简洁说明做了什么改动
 
-{files}{active_hint}"""
+{files}{active_hint}{identity_hint}"""
 
 
 def make_nodes(
@@ -73,7 +79,7 @@ def make_nodes(
         streaming=True,
     ).bind_tools(tools)
 
-    system_msg = SystemMessage(content=_build_system_prompt(store, active_file))
+    system_msg = SystemMessage(content=_build_system_prompt(store, active_file, model_name))
 
     # ── Node 1: generate_node ──────────────────────────────────────────
 
