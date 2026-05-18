@@ -33,7 +33,7 @@ const DISABLED_MODELS_STORAGE_KEY = 'private-rag-disabled-models'
 const WECHAT_USER_STORAGE_KEY = 'isshin-wechat-user'
 const WECHAT_STATE_STORAGE_KEY = 'isshin-wechat-state'
 
-type ActiveSection = 'explorer' | 'search'
+type ActiveSection = 'explorer' | 'search' | 'git' | 'chat'
 
 export default function App() {
   // ── Editor state ──────────────────────────────────────────────
@@ -586,7 +586,7 @@ export default function App() {
   }
   const language = activeTab?.ext ? (EXT_LANGUAGE[activeTab.ext] ?? 'Plain Text') : 'Plain Text'
 
-  const showSidePanel = activeSection === 'explorer' || activeSection === 'search'
+  const showSidePanel = activeSection === 'explorer' || activeSection === 'search' || activeSection === 'git'
   const finalShowSidePanel = showSidebar && showSidePanel
 
   // ── Resizable panels ──────────────────────────────────────────
