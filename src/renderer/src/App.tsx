@@ -33,7 +33,7 @@ const DISABLED_MODELS_STORAGE_KEY = 'private-rag-disabled-models'
 const WECHAT_USER_STORAGE_KEY = 'isshin-wechat-user'
 const WECHAT_STATE_STORAGE_KEY = 'isshin-wechat-state'
 
-type ActiveSection = 'explorer' | 'search' | 'chat'
+type ActiveSection = 'explorer' | 'search'
 
 export default function App() {
   // ── Editor state ──────────────────────────────────────────────
