@@ -31,6 +31,7 @@ import config as cfg
 from agent.graph import build_graph
 from agent.schema import AgentGraphState, AgentRequest
 from agent.tools import FileStore
+from auth.wechat import router as wechat_router
 
 # ── App ──────────────────────────────────────────────────────────────
 
@@ -46,11 +47,13 @@ app.add_middleware(
         "https://tauri.localhost",
         "http://tauri.localhost",
     ],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 AGENT_PORT = int(os.environ.get("AGENT_PORT", "8788"))
+
+app.include_router(wechat_router)
 
 
 # ── SSE 工具函数 ──────────────────────────────────────────────────────

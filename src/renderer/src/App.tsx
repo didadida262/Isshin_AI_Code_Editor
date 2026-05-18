@@ -10,6 +10,8 @@ import {
 } from './api/enterprise'
 import type { AgentEvent } from './agent/types'
 import { ActivityBar } from './components/ActivityBar'
+import { WechatLoginModal } from './components/WechatLoginModal'
+import type { WechatUser } from './components/WechatLoginModal'
 import { AiChatSidebar } from './components/AiChatSidebar'
 import { EditorArea } from './components/EditorArea'
 import type { EditorSelectionPayload, EditorTab } from './components/EditorArea'
@@ -28,6 +30,8 @@ const BASE_URL_STORAGE_KEY = 'private-rag-llm-base-url'
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'private-rag-header-token'
 const EDITOR_OPTIONS_STORAGE_KEY = 'private-rag-editor-options'
 const DISABLED_MODELS_STORAGE_KEY = 'private-rag-disabled-models'
+const WECHAT_USER_STORAGE_KEY = 'isshin-wechat-user'
+const WECHAT_STATE_STORAGE_KEY = 'isshin-wechat-state'
 
 type ActiveSection = 'explorer' | 'search' | 'git' | 'extensions' | 'chat'
 
@@ -44,6 +48,11 @@ export default function App() {
   const [terminalHeight, setTerminalHeight] = useState(220)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [editorOptions, setEditorOptions] = useState<EditorOptions>(DEFAULT_EDITOR_OPTIONS)
+
+  // ── WeChat auth ────────────────────────────────────────────────
+  const [wechatLoginOpen, setWechatLoginOpen] = useState(false)
+  const [wechatUser, setWechatUser] = useState<WechatUser | null>(null)
+  const [wechatSessionState, setWechatSessionState] = useState('')
 
   // ── Toast ─────────────────────────────────────────────────────
   const { toasts, push: pushToast, dismiss: dismissToast } = useToast()
@@ -76,6 +85,16 @@ export default function App() {
       setBaseUrl(localStorage.getItem(BASE_URL_STORAGE_KEY) ?? '')
       setApiKey(localStorage.getItem(API_KEY_STORAGE_KEY) ?? '')
       setSelectedModelPath(localStorage.getItem(MODEL_PATH_STORAGE_KEY) ?? '')
+
+      // Restore WeChat session
+      const savedUser = localStorage.getItem(WECHAT_USER_STORAGE_KEY)
+      const savedState = localStorage.getItem(WECHAT_STATE_STORAGE_KEY)
+      if (savedUser) {
+        try {
+          setWechatUser(JSON.parse(savedUser) as WechatUser)
+          setWechatSessionState(savedState ?? '')
+        } catch { /* ignore malformed */ }
+      }
       const editorStored = localStorage.getItem(EDITOR_OPTIONS_STORAGE_KEY)
       if (editorStored) {
         try {
@@ -680,6 +699,36 @@ export default function App() {
             } else {
               setActiveSection((prev) => (prev === s && showSidePanel ? 'chat' : s))
             }
+          }}
+          currentUser={wechatUser}
+          onAccountClick={() => setWechatLoginOpen(true)}
+          onLogout={() => {
+            // Remove session from backend (fire-and-forget)
+            if (wechatSessionState) {
+              fetch(`http://127.0.0.1:8788/auth/wechat/session/${wechatSessionState}`, {
+                method: 'DELETE',
+              }).catch(() => {})
+            }
+            setWechatUser(null)
+            setWechatSessionState('')
+            localStorage.removeItem(WECHAT_USER_STORAGE_KEY)
+            localStorage.removeItem(WECHAT_STATE_STORAGE_KEY)
+          }}
+        />
+
+        {/* WeChat login modal */}
+        <WechatLoginModal
+          open={wechatLoginOpen}
+          agentBaseUrl="http://127.0.0.1:8788"
+          onClose={() => setWechatLoginOpen(false)}
+          onLoginSuccess={(user, state) => {
+            setWechatUser(user)
+            setWechatSessionState(state)
+            setWechatLoginOpen(false)
+            try {
+              localStorage.setItem(WECHAT_USER_STORAGE_KEY, JSON.stringify(user))
+              localStorage.setItem(WECHAT_STATE_STORAGE_KEY, state)
+            } catch { /* ignore */ }
           }}
         />
 
