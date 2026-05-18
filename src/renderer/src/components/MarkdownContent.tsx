@@ -243,7 +243,18 @@ const mdComponents = (compact: boolean) =>
     ),
   }) as const
 
+/**
+ * 过滤掉 <think> 思考过程，不让用户看到
+ */
+function filterThinkingContent(content: string): string {
+  // 移除所有 <think>...</think> 标签及其内容（包括多行）
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+}
+
 export function MarkdownContent({ content, compact = false }: Props) {
+  // 过滤掉思考过程
+  const filteredContent = filterThinkingContent(content)
+  
   return (
     <div className={compact ? 'text-sm leading-snug' : 'text-sm leading-relaxed'}>
       <Markdown
@@ -252,7 +263,7 @@ export function MarkdownContent({ content, compact = false }: Props) {
           mdComponents(compact) as ComponentProps<typeof Markdown>['components']
         }
       >
-        {content}
+        {filteredContent}
       </Markdown>
     </div>
   )
