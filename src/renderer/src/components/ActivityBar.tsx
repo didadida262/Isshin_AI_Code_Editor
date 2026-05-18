@@ -1,9 +1,6 @@
 import {
-  faCodeBranch,
-  faCommentDots,
   faFile,
   faMagnifyingGlass,
-  faPuzzlePiece,
   faUser,
   faRightFromBracket,
 } from '@fortawesome/free-solid-svg-icons'
@@ -11,7 +8,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useState, useRef, useEffect } from 'react'
 import type { WechatUser } from './WechatLoginModal'
 
-type Section = 'explorer' | 'search' | 'git' | 'extensions' | 'chat'
+type Section = 'explorer' | 'search'
 
 type Props = {
   activeSection: Section
@@ -26,9 +23,6 @@ type TopItem = { id: Section; icon: typeof faFile; label: string }
 const TOP_ITEMS: TopItem[] = [
   { id: 'explorer', icon: faFile, label: '资源管理器' },
   { id: 'search', icon: faMagnifyingGlass, label: '搜索' },
-  { id: 'git', icon: faCodeBranch, label: '源代码管理' },
-  { id: 'extensions', icon: faPuzzlePiece, label: '扩展' },
-  { id: 'chat', icon: faCommentDots, label: 'Isshin AI Code Editor' },
 ]
 
 export function ActivityBar({
